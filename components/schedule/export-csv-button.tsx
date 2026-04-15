@@ -8,11 +8,19 @@ import type { HolidayCountry, ScheduleMember, ScheduleResult } from "@/lib/sched
 
 type Props = {
   holidayCountry: HolidayCountry;
+  rangeStart: string;
+  rangeEnd: string;
   members: ScheduleMember[];
   result: ScheduleResult | null;
 };
 
-export function ExportCsvButton({ holidayCountry, members, result }: Props) {
+export function ExportCsvButton({
+  holidayCountry,
+  rangeStart,
+  rangeEnd,
+  members,
+  result,
+}: Props) {
   const disabled = !result;
 
   return (
@@ -23,7 +31,7 @@ export function ExportCsvButton({ holidayCountry, members, result }: Props) {
       onClick={() => {
         if (!result) return;
         const names = new Map(members.map((m) => [m.id, m.name]));
-        const csv = buildScheduleCsv(holidayCountry, result, names);
+        const csv = buildScheduleCsv(rangeStart, rangeEnd, result, names);
         const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");

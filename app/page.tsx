@@ -151,6 +151,8 @@ export default function Home() {
           <div className="flex flex-wrap gap-2">
             <ExportCsvButton
               holidayCountry={holidayCountry}
+              rangeStart={startDate}
+              rangeEnd={endDate}
               members={members}
               result={result}
             />
