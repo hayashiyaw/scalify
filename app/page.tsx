@@ -10,6 +10,7 @@ import { HolidayCountrySection } from "@/components/schedule/holiday-country-sec
 import { ReportDashboard } from "@/components/schedule/report-dashboard";
 import { ScheduleCalendar } from "@/components/schedule/schedule-calendar";
 import { TeamSection, type TeamMemberForm } from "@/components/schedule/team-section";
+import { ThemeSelector } from "@/components/theme-selector";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { addDays, formatISODateOnly } from "@/lib/schedule/dates";
@@ -30,15 +31,18 @@ function newMember(): TeamMemberForm {
   return { id: crypto.randomUUID(), name: "", unavailableDates: [] };
 }
 
+/** Stable ids for the first two rows so SSR and the client match (avoids hydration errors from random UUIDs in useState). */
+const initialMembers = (): TeamMemberForm[] => [
+  { id: "member-initial-0", name: "", unavailableDates: [] },
+  { id: "member-initial-1", name: "", unavailableDates: [] },
+];
+
 export default function Home() {
   const { start: defaultStart, end: defaultEnd } = useMemo(() => defaultRange(), []);
   const [startDate, setStartDate] = useState(defaultStart);
   const [endDate, setEndDate] = useState(defaultEnd);
   const [holidayCountry, setHolidayCountry] = useState<HolidayCountry>("US");
-  const [members, setMembers] = useState<TeamMemberForm[]>(() => [
-    newMember(),
-    newMember(),
-  ]);
+  const [members, setMembers] = useState<TeamMemberForm[]>(initialMembers);
 
   const [result, setResult] = useState<ScheduleResult | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -102,11 +106,14 @@ export default function Home() {
   return (
     <div className="bg-background min-h-full">
       <div className="mx-auto flex max-w-5xl flex-col gap-8 px-4 py-10 md:px-6">
-        <header className="space-y-1">
-          <h1 className="text-3xl font-semibold tracking-tight">Scalify</h1>
-          <p className="text-muted-foreground text-sm md:text-base">
-            Balance weekday and weekend or holiday shifts across your team.
-          </p>
+        <header className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1">
+            <h1 className="text-3xl font-semibold tracking-tight">Scalify</h1>
+            <p className="text-muted-foreground text-sm md:text-base">
+              Balance weekday and weekend or holiday shifts across your team.
+            </p>
+          </div>
+          <ThemeSelector />
         </header>
 
         <div className="grid gap-6 lg:grid-cols-2">
