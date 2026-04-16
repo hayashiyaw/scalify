@@ -43,6 +43,7 @@ export default function Home() {
   const [endDate, setEndDate] = useState(defaultEnd);
   const [holidayCountry, setHolidayCountry] = useState<HolidayCountry>("US");
   const [members, setMembers] = useState<TeamMemberForm[]>(initialMembers);
+  const [colorblindMode, setColorblindMode] = useState(false);
 
   const [result, setResult] = useState<ScheduleResult | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -150,24 +151,42 @@ export default function Home() {
               <span>Ready to calculate.</span>
             )}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <ExportCsvButton
-              holidayCountry={holidayCountry}
-              rangeStart={startDate}
-              rangeEnd={endDate}
-              members={members}
-              result={result}
-            />
-            <Button
+          <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+            <button
               type="button"
-              disabled={!canCalculate || pending}
-              onClick={onCalculate}
+              className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50"
+              onClick={() => setColorblindMode((v) => !v)}
             >
-              {pending ? (
-                <Loader2 className="mr-2 size-4 animate-spin" />
-              ) : null}
-              Calculate shifts
-            </Button>
+              <span>Colorblind-friendly colors</span>
+              <span
+                className={
+                  colorblindMode
+                    ? "inline-flex h-4 w-7 items-center rounded-full bg-primary/80 px-0.5 text-[0.6rem] text-primary-foreground"
+                    : "inline-flex h-4 w-7 items-center justify-end rounded-full bg-muted px-0.5 text-[0.6rem]"
+                }
+              >
+                <span className="inline-block h-3 w-3 rounded-full bg-background shadow" />
+              </span>
+            </button>
+            <div className="flex flex-wrap gap-2">
+              <ExportCsvButton
+                holidayCountry={holidayCountry}
+                rangeStart={startDate}
+                rangeEnd={endDate}
+                members={members}
+                result={result}
+              />
+              <Button
+                type="button"
+                disabled={!canCalculate || pending}
+                onClick={onCalculate}
+              >
+                {pending ? (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                ) : null}
+                Calculate shifts
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -213,6 +232,7 @@ export default function Home() {
               assignments={result.assignments}
               memberNames={memberNames}
               memberDisplayOrder={result.memberDisplayOrder}
+              colorMode={colorblindMode ? "colorblind" : "normal"}
             />
           </div>
         ) : null}

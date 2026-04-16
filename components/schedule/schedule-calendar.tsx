@@ -5,12 +5,8 @@ import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  addDays,
-  formatISODateOnly,
-  parseISODateOnly,
-} from "@/lib/schedule/dates";
-import { getMemberColors } from "@/lib/schedule/colors";
+import { addDays, formatISODateOnly, parseISODateOnly } from "@/lib/schedule/dates";
+import { getMemberColors, type MemberColorMode } from "@/lib/schedule/colors";
 import type { DayAssignment } from "@/lib/schedule/types";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +19,7 @@ type Props = {
   memberNames: Map<string, string>;
   /** Legend order (scrambled cycle order), not form order. */
   memberDisplayOrder: string[];
+  colorMode: MemberColorMode;
 };
 
 function monthMatrix(monthStart: Date): Date[][] {
@@ -50,6 +47,7 @@ export function ScheduleCalendar({
   assignments,
   memberNames,
   memberDisplayOrder,
+  colorMode,
 }: Props) {
   const start = parseISODateOnly(rangeStart);
   const end = parseISODateOnly(rangeEnd);
@@ -131,7 +129,7 @@ export function ScheduleCalendar({
               const assignment = byDate.get(iso);
               const assigneeId = assignment?.assigneeId ?? null;
               const colors = assigneeId
-                ? getMemberColors(assigneeId)
+                ? getMemberColors(assigneeId, colorMode)
                 : null;
               const label = assigneeId
                 ? memberNames.get(assigneeId) ?? assigneeId
@@ -176,7 +174,7 @@ export function ScheduleCalendar({
             <span className="font-medium">People</span>
             {memberDisplayOrder.map((id) => {
               const name = memberNames.get(id)?.trim() || id;
-              const colors = getMemberColors(id);
+              const colors = getMemberColors(id, colorMode);
               return (
                 <span
                   key={id}

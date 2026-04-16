@@ -136,6 +136,7 @@ export function assignShifts(
 
   const assignments: DayAssignment[] = [];
   const warnings: ScheduleWarning[] = [];
+  const assignmentsByDate = new Map<string, DayAssignment>();
 
   for (const day of days) {
     const dateStr = formatISODateOnly(day);
@@ -146,7 +147,23 @@ export function assignShifts(
       (m) => !m.unavailableDates.includes(dateStr),
     );
 
-    if (available.length === 0) {
+    // Enforce: no member should receive two consecutive shifts.
+    const prevDay = addDays(day, -1);
+    const prevDateStr = formatISODateOnly(prevDay);
+    const prevAssignment = assignmentsByDate.get(prevDateStr);
+    const prevAssigneeId = prevAssignment?.assigneeId ?? null;
+
+    let effectiveAvailable = available;
+    if (prevAssigneeId) {
+      const withoutPrev = available.filter((m) => m.id !== prevAssigneeId);
+      if (withoutPrev.length > 0) {
+        effectiveAvailable = withoutPrev;
+      } else {
+        effectiveAvailable = [];
+      }
+    }
+
+    if (effectiveAvailable.length === 0) {
       assignments.push({
         date: dateStr,
         pool,
@@ -157,7 +174,7 @@ export function assignShifts(
       continue;
     }
 
-    const availableIds = available
+    const availableIds = effectiveAvailable
       .map((m) => m.id)
       .sort((a, b) => {
         const oa = teamOrder.get(a)!;
@@ -188,6 +205,12 @@ export function assignShifts(
     }
 
     assignments.push({
+      date: dateStr,
+      pool,
+      assigneeId: chosenId,
+      hours,
+    });
+    assignmentsByDate.set(dateStr, {
       date: dateStr,
       pool,
       assigneeId: chosenId,
