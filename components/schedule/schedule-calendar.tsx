@@ -21,6 +21,8 @@ type Props = {
   rangeEnd: string;
   assignments: DayAssignment[];
   memberNames: Map<string, string>;
+  /** Legend order (scrambled cycle order), not form order. */
+  memberDisplayOrder: string[];
 };
 
 function monthMatrix(monthStart: Date): Date[][] {
@@ -47,6 +49,7 @@ export function ScheduleCalendar({
   rangeEnd,
   assignments,
   memberNames,
+  memberDisplayOrder,
 }: Props) {
   const start = parseISODateOnly(rangeStart);
   const end = parseISODateOnly(rangeEnd);
@@ -166,6 +169,25 @@ export function ScheduleCalendar({
                     </span>
                   ) : null}
                 </div>
+              );
+            })}
+          </div>
+          <div className="text-muted-foreground mt-4 flex flex-wrap items-center gap-2 border-t pt-3 text-xs">
+            <span className="font-medium">People</span>
+            {memberDisplayOrder.map((id) => {
+              const name = memberNames.get(id)?.trim() || id;
+              const colors = getMemberColors(id);
+              return (
+                <span
+                  key={id}
+                  className="rounded-md border px-2 py-0.5 font-medium shadow-sm"
+                  style={{
+                    backgroundColor: colors.background,
+                    color: colors.foreground,
+                  }}
+                >
+                  {name}
+                </span>
               );
             })}
           </div>

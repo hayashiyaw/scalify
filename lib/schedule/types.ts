@@ -44,6 +44,8 @@ export type ScheduleResult = {
   assignments: DayAssignment[];
   report: PersonReport[];
   warnings: ScheduleWarning[];
+  /** Row order for summary/export; deterministic scramble per cycle (not form order). */
+  memberDisplayOrder: string[];
 };
 
 export const scheduleMemberSchema = z.object({

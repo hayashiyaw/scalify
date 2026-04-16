@@ -6,6 +6,7 @@ import type {
   ScheduleWarning,
   ShiftPool,
 } from "./types";
+import { memberOrderForCycle } from "./deterministic-shuffle";
 import { addDays, formatISODateOnly, isWeekend, parseISODateOnly } from "./dates";
 import type { HolidayChecker } from "./holidays";
 
@@ -28,20 +29,42 @@ function poolForDay(
   return { pool: "A", hours: 12 };
 }
 
+/** `YYYY-MM` from ISO date string */
+function monthKey(isoDate: string): string {
+  return isoDate.slice(0, 7);
+}
+
+function getM(
+  map: Map<string, number>,
+  memberId: string,
+  mk: string,
+): number {
+  return map.get(`${memberId}|${mk}`) ?? 0;
+}
+
+function bumpM(
+  map: Map<string, number>,
+  memberId: string,
+  mk: string,
+): void {
+  const key = `${memberId}|${mk}`;
+  map.set(key, (map.get(key) ?? 0) + 1);
+}
+
 /**
- * Fair assignment within a day:
- * - Pool A: minimize weekday shifts, then weekend/holiday shifts (spread load),
- *   then team order.
- * - Pool B: minimize weekend/holiday shifts, then weekday shifts, then team order.
- *
- * Secondary key on the *other* pool avoids one person hoarding both buckets when
- * primary counts tie (total-hours tie-break was skewing that).
+ * Fair assignment: balance globally in the active pool first, then within the
+ * same pool for the current calendar month, then the other pool (global, then
+ * monthly), then team order. This keeps overall division even while improving
+ * per-month splits when the range spans multiple months.
  */
 function pickAssignee(
   availableIds: string[],
   pool: ShiftPool,
+  monthKeyStr: string,
   weekdayCount: Map<string, number>,
   weekendHolidayCount: Map<string, number>,
+  weekdayInMonth: Map<string, number>,
+  weekendHolidayInMonth: Map<string, number>,
   teamOrder: Map<string, number>,
 ): string {
   let best = availableIds[0]!;
@@ -49,22 +72,34 @@ function pickAssignee(
     const id = availableIds[i]!;
     const wd = weekdayCount.get(id)!;
     const wh = weekendHolidayCount.get(id)!;
+    const wdM = getM(weekdayInMonth, id, monthKeyStr);
+    const whM = getM(weekendHolidayInMonth, id, monthKeyStr);
     const bwd = weekdayCount.get(best)!;
     const bwh = weekendHolidayCount.get(best)!;
+    const bwdM = getM(weekdayInMonth, best, monthKeyStr);
+    const bwhM = getM(weekendHolidayInMonth, best, monthKeyStr);
     const ord = teamOrder.get(id)!;
     const bord = teamOrder.get(best)!;
 
     if (pool === "A") {
       if (wd < bwd) best = id;
       else if (wd > bwd) continue;
+      else if (wdM < bwdM) best = id;
+      else if (wdM > bwdM) continue;
       else if (wh < bwh) best = id;
       else if (wh > bwh) continue;
+      else if (whM < bwhM) best = id;
+      else if (whM > bwhM) continue;
       else if (ord < bord) best = id;
     } else {
       if (wh < bwh) best = id;
       else if (wh > bwh) continue;
+      else if (whM < bwhM) best = id;
+      else if (whM > bwhM) continue;
       else if (wd < bwd) best = id;
       else if (wd > bwd) continue;
+      else if (wdM < bwdM) best = id;
+      else if (wdM > bwdM) continue;
       else if (ord < bord) best = id;
     }
   }
@@ -79,12 +114,21 @@ export function assignShifts(
   const end = parseISODateOnly(input.endDate);
   const days = enumerateDaysInclusive(start, end);
 
+  const memberIds = input.members.map((m) => m.id);
+  const scrambledIds = memberOrderForCycle(
+    input.startDate,
+    input.endDate,
+    memberIds,
+  );
   const teamOrder = new Map(
-    input.members.map((m, index) => [m.id, index]),
+    scrambledIds.map((id, index) => [id, index]),
   );
 
   const weekdayCount = new Map<string, number>();
   const weekendHolidayCount = new Map<string, number>();
+  const weekdayInMonth = new Map<string, number>();
+  const weekendHolidayInMonth = new Map<string, number>();
+
   for (const m of input.members) {
     weekdayCount.set(m.id, 0);
     weekendHolidayCount.set(m.id, 0);
@@ -95,6 +139,7 @@ export function assignShifts(
 
   for (const day of days) {
     const dateStr = formatISODateOnly(day);
+    const mk = monthKey(dateStr);
     const { pool, hours } = poolForDay(day, isPublicHoliday);
 
     const available = input.members.filter(
@@ -123,18 +168,23 @@ export function assignShifts(
     const chosenId = pickAssignee(
       availableIds,
       pool,
+      mk,
       weekdayCount,
       weekendHolidayCount,
+      weekdayInMonth,
+      weekendHolidayInMonth,
       teamOrder,
     );
 
     if (pool === "A") {
       weekdayCount.set(chosenId, weekdayCount.get(chosenId)! + 1);
+      bumpM(weekdayInMonth, chosenId, mk);
     } else {
       weekendHolidayCount.set(
         chosenId,
         weekendHolidayCount.get(chosenId)! + 1,
       );
+      bumpM(weekendHolidayInMonth, chosenId, mk);
     }
 
     assignments.push({
@@ -145,7 +195,9 @@ export function assignShifts(
     });
   }
 
-  const report: PersonReport[] = input.members.map((m) => {
+  const byId = new Map(input.members.map((m) => [m.id, m]));
+  const report: PersonReport[] = scrambledIds.map((id) => {
+    const m = byId.get(id)!;
     const wd = weekdayCount.get(m.id)!;
     const wh = weekendHolidayCount.get(m.id)!;
     return {
@@ -157,5 +209,10 @@ export function assignShifts(
     };
   });
 
-  return { assignments, report, warnings };
+  return {
+    assignments,
+    report,
+    warnings,
+    memberDisplayOrder: scrambledIds,
+  };
 }
