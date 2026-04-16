@@ -194,12 +194,23 @@ export default function Home() {
 
         {result ? (
           <div className="grid gap-6 lg:grid-cols-1">
-            <ReportDashboard report={result.report} />
+            <ReportDashboard
+              report={result.report}
+              assignments={result.assignments}
+              members={members.map((m) => ({
+                id: m.id,
+                name: m.name.trim() || "Unnamed",
+              }))}
+              memberDisplayOrder={result.memberDisplayOrder}
+              rangeStart={startDate}
+              rangeEnd={endDate}
+            />
             <ScheduleCalendar
               rangeStart={startDate}
               rangeEnd={endDate}
               assignments={result.assignments}
               memberNames={memberNames}
+              memberDisplayOrder={result.memberDisplayOrder}
             />
           </div>
         ) : null}
