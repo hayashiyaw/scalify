@@ -108,7 +108,9 @@ export default function Home() {
       <div className="mx-auto flex max-w-5xl flex-col gap-8 px-4 py-10 md:px-6">
         <header className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
-            <h1 className="text-3xl font-semibold tracking-tight">Scalify</h1>
+            <h1 className="font-heading text-3xl font-semibold tracking-tight">
+              Scalify
+            </h1>
             <p className="text-muted-foreground text-sm md:text-base">
               Balance weekday and weekend or holiday shifts across your team.
             </p>
