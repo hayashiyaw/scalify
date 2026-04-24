@@ -3,9 +3,12 @@
 import { ZodError } from "zod";
 
 import {
+  TeamMemberAlreadyExistsError,
+  TeamMemberTargetNotFoundError,
   TeamAccessDeniedError,
   TeamPermissionDeniedError,
   UnauthorizedTeamAccessError,
+  addTeamMemberByEmailForCurrentUser,
   listTeamsForCurrentUser,
   loadTeamMembersForCurrentUser,
   saveTeamMembersForCurrentUser,
@@ -16,7 +19,12 @@ import type { ScheduleMember } from "@/lib/schedule/types";
 type TeamActionError = {
   ok: false;
   error: string;
-  code?: "unauthorized" | "not_member" | "forbidden";
+  code?:
+    | "unauthorized"
+    | "not_member"
+    | "forbidden"
+    | "target_user_not_found"
+    | "already_member";
   fieldErrors?: Record<string, string[]>;
 };
 
@@ -58,6 +66,17 @@ export async function loadTeamMembersAction(teamId: string): Promise<
   }
 }
 
+export async function addTeamMemberByEmailAction(raw: unknown): Promise<
+  TeamActionSuccess<{ teamId: string; userId: string; email: string; role: string }> | TeamActionError
+> {
+  try {
+    const created = await addTeamMemberByEmailForCurrentUser(raw);
+    return { ok: true, data: created };
+  } catch (error) {
+    return toTeamActionError(error);
+  }
+}
+
 function toTeamActionError(error: unknown): TeamActionError {
   if (
     error instanceof UnauthorizedTeamAccessError
@@ -71,6 +90,14 @@ function toTeamActionError(error: unknown): TeamActionError {
 
   if (error instanceof TeamPermissionDeniedError) {
     return { ok: false, error: error.message, code: "forbidden" };
+  }
+
+  if (error instanceof TeamMemberTargetNotFoundError) {
+    return { ok: false, error: error.message, code: "target_user_not_found" };
+  }
+
+  if (error instanceof TeamMemberAlreadyExistsError) {
+    return { ok: false, error: error.message, code: "already_member" };
   }
 
   if (error instanceof ZodError) {

@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { useSession } from "next-auth/react";
 
 import {
+  addTeamMemberByEmailAction,
   listTeamsAction,
   loadTeamMembersAction,
   saveTeamMembersAction,
@@ -15,6 +16,7 @@ import { ThemeSelector } from "@/components/theme-selector";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -51,6 +53,7 @@ export default function TeamsPage() {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [teamError, setTeamError] = useState<string | null>(null);
   const [teamNotice, setTeamNotice] = useState<string | null>(null);
+  const [memberEmail, setMemberEmail] = useState("");
 
   const localDraft = useMemo(() => {
     const draft = loadScheduleDraft();
@@ -167,6 +170,46 @@ export default function TeamsPage() {
     });
   }, [localDraft, selectedTeamId]);
 
+  const addMemberByEmail = useCallback(() => {
+    if (!selectedTeamId) {
+      setTeamError("Select a team before adding a member.");
+      return;
+    }
+    if (!canSaveFromDraft) {
+      setTeamError("Your role does not allow adding members to this team.");
+      return;
+    }
+
+    setTeamError(null);
+    setTeamNotice(null);
+    startTransition(async () => {
+      const response = await addTeamMemberByEmailAction({
+        teamId: selectedTeamId,
+        email: memberEmail.trim(),
+      });
+
+      if (!response.ok) {
+        if (response.code === "target_user_not_found") {
+          setTeamError("No account exists with that email. Ask the user to register first.");
+          return;
+        }
+        if (response.code === "already_member") {
+          setTeamError("That account is already a member of this team.");
+          return;
+        }
+        setTeamError(response.error);
+        return;
+      }
+
+      setMemberEmail("");
+      setTeamNotice(`Added ${response.data.email} as a member.`);
+      const refreshed = await listTeamsAction();
+      if (refreshed.ok) {
+        setTeams(refreshed.data);
+      }
+    });
+  }, [canSaveFromDraft, memberEmail, selectedTeamId]);
+
   return (
     <div className="bg-background min-h-full">
       <div className="mx-auto flex max-w-5xl flex-col gap-8 px-4 py-10 md:px-6">
@@ -238,6 +281,32 @@ export default function TeamsPage() {
                 ) : null}
                 {teams.length === 0 ? (
                   <p className="text-muted-foreground text-sm">You are not in any teams yet.</p>
+                ) : null}
+                {teams.length > 0 ? (
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <Input
+                      type="email"
+                      value={memberEmail}
+                      onChange={(event) => setMemberEmail(event.target.value)}
+                      placeholder="Add existing user by email"
+                      disabled={pending || !selectedTeamId || !canSaveFromDraft}
+                      className="sm:w-80"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={addMemberByEmail}
+                      disabled={
+                        pending ||
+                        !selectedTeamId ||
+                        !canSaveFromDraft ||
+                        memberEmail.trim().length === 0
+                      }
+                    >
+                      {pending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+                      Add member
+                    </Button>
+                  </div>
                 ) : null}
               </>
             )}

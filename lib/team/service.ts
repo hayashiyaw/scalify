@@ -55,9 +55,28 @@ export class TeamPermissionDeniedError extends Error {
   }
 }
 
+export class TeamMemberTargetNotFoundError extends Error {
+  constructor() {
+    super("No account exists with that email.");
+    this.name = "TeamMemberTargetNotFoundError";
+  }
+}
+
+export class TeamMemberAlreadyExistsError extends Error {
+  constructor() {
+    super("This user is already a member of the selected team.");
+    this.name = "TeamMemberAlreadyExistsError";
+  }
+}
+
 const saveTeamMembersInputSchema = z.object({
   teamId: z.string().min(1, "Team is required."),
   members: z.array(scheduleMemberSchema).min(2, "Add at least two team members."),
+});
+
+const addTeamMemberByEmailInputSchema = z.object({
+  teamId: z.string().min(1, "Team is required."),
+  email: z.string().trim().email("Provide a valid account email."),
 });
 
 export async function createTeamForCurrentUser(
@@ -191,6 +210,59 @@ export async function loadTeamMembersForCurrentUser(
   return {
     teamId: parsedTeamId,
     members,
+  };
+}
+
+export async function addTeamMemberByEmailForCurrentUser(
+  raw: unknown,
+): Promise<{ teamId: string; userId: string; email: string; role: TeamRole }> {
+  const userId = await requireUserId();
+  const parsed = addTeamMemberByEmailInputSchema.parse(raw);
+
+  await assertTeamPermission(parsed.teamId, userId, "team:members:write");
+
+  const email = parsed.email.toLowerCase();
+  const targetUser = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, email: true },
+  });
+
+  if (!targetUser) {
+    throw new TeamMemberTargetNotFoundError();
+  }
+
+  const existingMembership = await prisma.teamMembership.findUnique({
+    where: {
+      teamId_userId: {
+        teamId: parsed.teamId,
+        userId: targetUser.id,
+      },
+    },
+    select: { id: true },
+  });
+
+  if (existingMembership) {
+    throw new TeamMemberAlreadyExistsError();
+  }
+
+  const membership = await prisma.teamMembership.create({
+    data: {
+      teamId: parsed.teamId,
+      userId: targetUser.id,
+      role: TeamRole.MEMBER,
+    },
+    select: {
+      teamId: true,
+      userId: true,
+      role: true,
+    },
+  });
+
+  return {
+    teamId: membership.teamId,
+    userId: membership.userId,
+    email: targetUser.email,
+    role: membership.role,
   };
 }
 

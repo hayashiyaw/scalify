@@ -8,8 +8,12 @@ const { authMock, prismaMock } = vi.hoisted(() => ({
     team: {
       findMany: vi.fn(),
     },
+    user: {
+      findUnique: vi.fn(),
+    },
     teamMembership: {
       findUnique: vi.fn(),
+      create: vi.fn(),
     },
     teamRoster: {
       upsert: vi.fn(),
@@ -27,9 +31,12 @@ vi.mock("@/lib/db", () => ({
 }));
 
 import {
+  TeamMemberAlreadyExistsError,
+  TeamMemberTargetNotFoundError,
   TeamAccessDeniedError,
   TeamPermissionDeniedError,
   UnauthorizedTeamAccessError,
+  addTeamMemberByEmailForCurrentUser,
   createTeamForCurrentUser,
   loadTeamMembersForCurrentUser,
   listTeamsForCurrentUser,
@@ -339,5 +346,81 @@ describe("team service integration behaviors", () => {
       expect(schedule.data.assignments.length).toBeGreaterThan(0);
       expect(schedule.data.report).toHaveLength(2);
     }
+  });
+
+  it("adds existing users to a team by email when caller has permission", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "user_admin" },
+    });
+    prismaMock.teamMembership.findUnique
+      .mockResolvedValueOnce({ role: "ADMIN" })
+      .mockResolvedValueOnce(null);
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: "user_target",
+      email: "member@example.com",
+    });
+    prismaMock.teamMembership.create.mockResolvedValue({
+      teamId: "team_1",
+      userId: "user_target",
+      role: "MEMBER",
+    });
+
+    const result = await addTeamMemberByEmailForCurrentUser({
+      teamId: "team_1",
+      email: " MEMBER@example.com ",
+    });
+
+    expect(prismaMock.user.findUnique).toHaveBeenCalledWith({
+      where: { email: "member@example.com" },
+      select: { id: true, email: true },
+    });
+    expect(prismaMock.teamMembership.create).toHaveBeenCalledWith({
+      data: {
+        teamId: "team_1",
+        userId: "user_target",
+        role: "MEMBER",
+      },
+      select: {
+        teamId: true,
+        userId: true,
+        role: true,
+      },
+    });
+    expect(result.email).toBe("member@example.com");
+  });
+
+  it("fails to add member when target email account does not exist", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "user_admin" },
+    });
+    prismaMock.teamMembership.findUnique.mockResolvedValue({ role: "OWNER" });
+    prismaMock.user.findUnique.mockResolvedValue(null);
+
+    await expect(
+      addTeamMemberByEmailForCurrentUser({
+        teamId: "team_1",
+        email: "missing@example.com",
+      }),
+    ).rejects.toBeInstanceOf(TeamMemberTargetNotFoundError);
+  });
+
+  it("fails to add member when user is already in team", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "user_admin" },
+    });
+    prismaMock.teamMembership.findUnique
+      .mockResolvedValueOnce({ role: "OWNER" })
+      .mockResolvedValueOnce({ id: "membership_1" });
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: "user_target",
+      email: "member@example.com",
+    });
+
+    await expect(
+      addTeamMemberByEmailForCurrentUser({
+        teamId: "team_1",
+        email: "member@example.com",
+      }),
+    ).rejects.toBeInstanceOf(TeamMemberAlreadyExistsError);
   });
 });
