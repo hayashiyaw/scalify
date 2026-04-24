@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 
 import {
   TeamAccessDeniedError,
+  TeamPermissionDeniedError,
   UnauthorizedTeamAccessError,
   listTeamsForCurrentUser,
   loadTeamMembersForCurrentUser,
@@ -15,6 +16,7 @@ import type { ScheduleMember } from "@/lib/schedule/types";
 type TeamActionError = {
   ok: false;
   error: string;
+  code?: "unauthorized" | "not_member" | "forbidden";
   fieldErrors?: Record<string, string[]>;
 };
 
@@ -58,10 +60,17 @@ export async function loadTeamMembersAction(teamId: string): Promise<
 
 function toTeamActionError(error: unknown): TeamActionError {
   if (
-    error instanceof UnauthorizedTeamAccessError ||
-    error instanceof TeamAccessDeniedError
+    error instanceof UnauthorizedTeamAccessError
   ) {
-    return { ok: false, error: error.message };
+    return { ok: false, error: error.message, code: "unauthorized" };
+  }
+
+  if (error instanceof TeamAccessDeniedError) {
+    return { ok: false, error: error.message, code: "not_member" };
+  }
+
+  if (error instanceof TeamPermissionDeniedError) {
+    return { ok: false, error: error.message, code: "forbidden" };
   }
 
   if (error instanceof ZodError) {
