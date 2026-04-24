@@ -18,6 +18,37 @@ model User {
   updatedAt    DateTime  @updatedAt
   accounts     Account[]
   sessions     Session[]
+  ownedTeams   Team[]          @relation("TeamOwner")
+  memberships  TeamMembership[]
+}
+
+enum TeamRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model Team {
+  id          String           @id @default(cuid())
+  name        String
+  ownerId     String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  owner       User             @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  memberships TeamMembership[]
+}
+
+model TeamMembership {
+  id        String   @id @default(cuid())
+  teamId    String
+  userId    String
+  role      TeamRole @default(MEMBER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
 }
 
 model Account {
