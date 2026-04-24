@@ -2,14 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
-import { useSession } from "next-auth/react";
+import Link from "next/link";
 
 import { calculateSchedule } from "@/app/actions/schedule";
-import {
-  listTeamsAction,
-  loadTeamMembersAction,
-  saveTeamMembersAction,
-} from "@/app/actions/team";
 import { AccountCard } from "@/components/auth/account-card";
 import { DateRangeSection } from "@/components/schedule/date-range-section";
 import { ExportCsvButton } from "@/components/schedule/export-csv-button";
@@ -20,14 +15,6 @@ import { TeamSection, type TeamMemberForm } from "@/components/schedule/team-sec
 import { ThemeSelector } from "@/components/theme-selector";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { addDays, formatISODateOnly } from "@/lib/schedule/dates";
 import {
   clearScheduleDraft,
@@ -36,7 +23,6 @@ import {
 } from "@/lib/schedule/draft-storage";
 import type { HolidayCountry, ScheduleResult } from "@/lib/schedule/types";
 import { scheduleInputSchema } from "@/lib/schedule/types";
-import type { TeamSummary } from "@/lib/team/service";
 
 function defaultRange(): { start: string; end: string } {
   const t = new Date();
@@ -59,7 +45,6 @@ const initialMembers = (): TeamMemberForm[] => [
 ];
 
 export default function Home() {
-  const { status: sessionStatus } = useSession();
   const { start: defaultStart, end: defaultEnd } = useMemo(() => defaultRange(), []);
   const [startDate, setStartDate] = useState(defaultStart);
   const [endDate, setEndDate] = useState(defaultEnd);
@@ -71,11 +56,6 @@ export default function Home() {
   const [result, setResult] = useState<ScheduleResult | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const [teamActionPending, startTeamActionTransition] = useTransition();
-  const [teams, setTeams] = useState<TeamSummary[]>([]);
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
-  const [teamError, setTeamError] = useState<string | null>(null);
-  const [teamNotice, setTeamNotice] = useState<string | null>(null);
 
   const payload = useMemo(
     () => ({
@@ -169,83 +149,6 @@ export default function Home() {
     );
   }, []);
 
-  useEffect(() => {
-    if (sessionStatus !== "authenticated") {
-      setTeams([]);
-      setSelectedTeamId(null);
-      setTeamError(null);
-      setTeamNotice(null);
-      return;
-    }
-
-    startTeamActionTransition(async () => {
-      const response = await listTeamsAction();
-      if (!response.ok) {
-        setTeams([]);
-        setSelectedTeamId(null);
-        setTeamError(response.error);
-        setTeamNotice(null);
-        return;
-      }
-      setTeams(response.data);
-      setSelectedTeamId((current) =>
-        current && response.data.some((team) => team.id === current)
-          ? current
-          : (response.data[0]?.id ?? null),
-      );
-      setTeamError(null);
-    });
-  }, [sessionStatus]);
-
-  const saveTeamDraft = useCallback(() => {
-    if (!selectedTeamId) {
-      setTeamError("Select a team before saving.");
-      return;
-    }
-
-    setTeamError(null);
-    setTeamNotice(null);
-    startTeamActionTransition(async () => {
-      const response = await saveTeamMembersAction({
-        teamId: selectedTeamId,
-        members: payload.members,
-      });
-
-      if (!response.ok) {
-        setTeamError(response.error);
-        return;
-      }
-
-      setTeamNotice("Team availability saved.");
-    });
-  }, [payload.members, selectedTeamId]);
-
-  const loadTeamDraft = useCallback(() => {
-    if (!selectedTeamId) {
-      setTeamError("Select a team before loading.");
-      return;
-    }
-
-    setTeamError(null);
-    setTeamNotice(null);
-    startTeamActionTransition(async () => {
-      const response = await loadTeamMembersAction(selectedTeamId);
-      if (!response.ok) {
-        setTeamError(response.error);
-        return;
-      }
-
-      setMembers(response.data.members);
-      setResult(null);
-      setActionError(null);
-      setTeamNotice(
-        response.data.members.length > 0
-          ? "Loaded saved team availability into the form."
-          : "No saved team availability found yet.",
-      );
-    });
-  }, [selectedTeamId]);
-
   return (
     <div className="bg-background min-h-full">
       <div className="mx-auto flex max-w-5xl flex-col gap-8 px-4 py-10 md:px-6">
@@ -262,79 +165,6 @@ export default function Home() {
         </header>
 
         <AccountCard />
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Saved team availability</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {sessionStatus !== "authenticated" ? (
-              <p className="text-muted-foreground text-sm">
-                Log in to save and load team members with unavailable dates.
-              </p>
-            ) : (
-              <>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <Select
-                    value={selectedTeamId ?? ""}
-                    onValueChange={(value) => setSelectedTeamId(value)}
-                  >
-                    <SelectTrigger className="w-full sm:w-80">
-                      <SelectValue placeholder="Select a team" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {teams.map((team) => (
-                        <SelectItem key={team.id} value={team.id}>
-                          {team.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={loadTeamDraft}
-                      disabled={teamActionPending || !selectedTeamId}
-                    >
-                      {teamActionPending ? (
-                        <Loader2 className="mr-2 size-4 animate-spin" />
-                      ) : null}
-                      Load team
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={saveTeamDraft}
-                      disabled={teamActionPending || !selectedTeamId}
-                    >
-                      {teamActionPending ? (
-                        <Loader2 className="mr-2 size-4 animate-spin" />
-                      ) : null}
-                      Save team
-                    </Button>
-                  </div>
-                </div>
-                {teams.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">
-                    You are not in any teams yet.
-                  </p>
-                ) : null}
-              </>
-            )}
-            {teamError ? (
-              <Alert variant="destructive">
-                <AlertTitle>Team sync failed</AlertTitle>
-                <AlertDescription>{teamError}</AlertDescription>
-              </Alert>
-            ) : null}
-            {teamNotice ? (
-              <Alert>
-                <AlertTitle>Team sync</AlertTitle>
-                <AlertDescription>{teamNotice}</AlertDescription>
-              </Alert>
-            ) : null}
-          </CardContent>
-        </Card>
 
         <div className="grid gap-6 lg:grid-cols-2">
           <DateRangeSection
@@ -356,6 +186,13 @@ export default function Home() {
           onNameChange={updateName}
           onUnavailableChange={updateUnavailable}
         />
+        <div className="text-muted-foreground text-sm">
+          Team management moved to{" "}
+          <Link href="/teams" className="text-primary underline-offset-4 hover:underline">
+            Team workspace
+          </Link>
+          . Use that page to save and load shared availability.
+        </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-muted-foreground text-sm">

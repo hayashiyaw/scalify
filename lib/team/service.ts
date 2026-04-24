@@ -186,11 +186,22 @@ export async function loadTeamMembersForCurrentUser(
 
 async function requireUserId(): Promise<string> {
   const session = await auth();
-  const userId = (session?.user as { id?: string } | undefined)?.id;
-  if (!userId) {
-    throw new UnauthorizedTeamAccessError();
+  const user = session?.user as { id?: string; email?: string } | undefined;
+  if (user?.id) {
+    return user.id;
   }
-  return userId;
+
+  if (user?.email) {
+    const dbUser = await prisma.user.findUnique({
+      where: { email: user.email.toLowerCase() },
+      select: { id: true },
+    });
+    if (dbUser?.id) {
+      return dbUser.id;
+    }
+  }
+
+  throw new UnauthorizedTeamAccessError();
 }
 
 async function assertTeamMembership(teamId: string, userId: string): Promise<void> {
