@@ -27,6 +27,8 @@ export type TeamSummary = {
   name: string;
   ownerId: string;
   ownerRole: TeamRole;
+  currentUserRole: TeamRole;
+  canManageRoster: boolean;
   memberCount: number;
   createdAt: Date;
   updatedAt: Date;
@@ -93,7 +95,7 @@ export async function createTeamForCurrentUser(
     });
   });
 
-  return toTeamSummary(team);
+  return toTeamSummary(team, userId);
 }
 
 export async function listTeamsForCurrentUser(): Promise<TeamSummary[]> {
@@ -118,7 +120,7 @@ export async function listTeamsForCurrentUser(): Promise<TeamSummary[]> {
     },
   });
 
-  return teams.map(toTeamSummary);
+  return teams.map((team) => toTeamSummary(team, userId));
 }
 
 export async function saveTeamMembersForCurrentUser(
@@ -236,13 +238,16 @@ async function assertTeamPermission(
   }
 }
 
-function toTeamSummary(team: TeamWithMemberships): TeamSummary {
+function toTeamSummary(team: TeamWithMemberships, currentUserId: string): TeamSummary {
   const ownerMembership = team.memberships.find(
     (membership) =>
       membership.userId === team.ownerId && membership.role === TeamRole.OWNER,
   );
+  const currentUserMembership = team.memberships.find(
+    (membership) => membership.userId === currentUserId,
+  );
 
-  if (!ownerMembership) {
+  if (!ownerMembership || !currentUserMembership) {
     throw new Error(`Team ${team.id} is missing an OWNER membership invariant.`);
   }
 
@@ -251,6 +256,8 @@ function toTeamSummary(team: TeamWithMemberships): TeamSummary {
     name: team.name,
     ownerId: team.ownerId,
     ownerRole: ownerMembership.role,
+    currentUserRole: currentUserMembership.role,
+    canManageRoster: canTeamRole(currentUserMembership.role, "team:roster:write"),
     memberCount: team.memberships.length,
     createdAt: team.createdAt,
     updatedAt: team.updatedAt,

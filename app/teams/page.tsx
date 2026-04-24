@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { addDays, formatISODateOnly } from "@/lib/schedule/dates";
 import { loadScheduleDraft, saveScheduleDraft } from "@/lib/schedule/draft-storage";
+import { canSaveTeamRoster, teamRosterPermissionHint } from "@/lib/team/roster-ui";
 import type { TeamSummary } from "@/lib/team/service";
 
 function defaultRange(): { start: string; end: string } {
@@ -94,9 +95,21 @@ export default function TeamsPage() {
     });
   }, [sessionStatus]);
 
+  const selectedTeam = useMemo(
+    () => teams.find((team) => team.id === selectedTeamId) ?? null,
+    [selectedTeamId, teams],
+  );
+
+  const canSaveFromDraft = canSaveTeamRoster(selectedTeam);
+  const rosterPermissionHint = teamRosterPermissionHint(selectedTeam);
+
   const saveCurrentDraft = useCallback(() => {
     if (!selectedTeamId) {
       setTeamError("Select a team before saving.");
+      return;
+    }
+    if (!canSaveFromDraft) {
+      setTeamError("Your role can view roster data but cannot save changes for this team.");
       return;
     }
 
@@ -113,13 +126,17 @@ export default function TeamsPage() {
       });
 
       if (!response.ok) {
-        setTeamError(response.error);
+        setTeamError(
+          response.code === "forbidden"
+            ? "Your role can view roster data but cannot save changes for this team."
+            : response.error,
+        );
         return;
       }
 
       setTeamNotice("Saved current scheduler members and availability to this team.");
     });
-  }, [localDraft.members, selectedTeamId]);
+  }, [canSaveFromDraft, localDraft.members, selectedTeamId]);
 
   const loadToSchedulerDraft = useCallback(() => {
     if (!selectedTeamId) {
@@ -183,6 +200,7 @@ export default function TeamsPage() {
                   <Select
                     value={selectedTeamId ?? ""}
                     onValueChange={(value) => setSelectedTeamId(value)}
+                    disabled={teams.length === 0}
                   >
                     <SelectTrigger className="w-full sm:w-80">
                       <SelectValue placeholder="Select a team" />
@@ -208,13 +226,16 @@ export default function TeamsPage() {
                     <Button
                       type="button"
                       onClick={saveCurrentDraft}
-                      disabled={pending || !selectedTeamId}
+                      disabled={pending || !selectedTeamId || !canSaveFromDraft}
                     >
                       {pending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
                       Save from draft
                     </Button>
                   </div>
                 </div>
+                {rosterPermissionHint ? (
+                  <p className="text-muted-foreground text-sm">{rosterPermissionHint}</p>
+                ) : null}
                 {teams.length === 0 ? (
                   <p className="text-muted-foreground text-sm">You are not in any teams yet.</p>
                 ) : null}
