@@ -8,7 +8,7 @@ const scheduleDraftSchema = z.object({
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   holidayCountry: holidayCountrySchema,
-  members: z.array(scheduleMemberSchema).min(2),
+  members: z.array(scheduleMemberSchema),
   colorblindMode: z.boolean().default(false),
 });
 
