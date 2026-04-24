@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { calculateSchedule } from "@/app/actions/schedule";
 
 const { authMock, prismaMock } = vi.hoisted(() => ({
   authMock: vi.fn(),
@@ -6,6 +7,13 @@ const { authMock, prismaMock } = vi.hoisted(() => ({
     $transaction: vi.fn(),
     team: {
       findMany: vi.fn(),
+    },
+    teamMembership: {
+      findUnique: vi.fn(),
+    },
+    teamRoster: {
+      upsert: vi.fn(),
+      findUnique: vi.fn(),
     },
   },
 }));
@@ -19,9 +27,12 @@ vi.mock("@/lib/db", () => ({
 }));
 
 import {
+  TeamAccessDeniedError,
   UnauthorizedTeamAccessError,
   createTeamForCurrentUser,
+  loadTeamMembersForCurrentUser,
   listTeamsForCurrentUser,
+  saveTeamMembersForCurrentUser,
 } from "@/lib/team/service";
 
 describe("team service integration behaviors", () => {
@@ -138,5 +149,130 @@ describe("team service integration behaviors", () => {
     await expect(listTeamsForCurrentUser()).rejects.toBeInstanceOf(
       UnauthorizedTeamAccessError,
     );
+  });
+
+  it("saves team members and availability for accessible team", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "user_1" },
+    });
+    prismaMock.teamMembership.findUnique.mockResolvedValue({ id: "membership_1" });
+    prismaMock.teamRoster.upsert.mockResolvedValue({});
+
+    const result = await saveTeamMembersForCurrentUser({
+      teamId: "team_1",
+      members: [
+        {
+          id: "member_a",
+          name: "Alice",
+          unavailableDates: ["2026-04-29"],
+        },
+        {
+          id: "member_b",
+          name: "Bob",
+          unavailableDates: [],
+        },
+      ],
+    });
+
+    expect(prismaMock.teamMembership.findUnique).toHaveBeenCalledWith({
+      where: {
+        teamId_userId: {
+          teamId: "team_1",
+          userId: "user_1",
+        },
+      },
+      select: { id: true },
+    });
+    expect(prismaMock.teamRoster.upsert).toHaveBeenCalledWith({
+      where: { teamId: "team_1" },
+      create: {
+        teamId: "team_1",
+        members: result.members,
+      },
+      update: {
+        members: result.members,
+      },
+    });
+    expect(result.members).toHaveLength(2);
+  });
+
+  it("returns empty members when a team has no saved roster yet", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "user_1" },
+    });
+    prismaMock.teamMembership.findUnique.mockResolvedValue({ id: "membership_1" });
+    prismaMock.teamRoster.findUnique.mockResolvedValue(null);
+
+    const result = await loadTeamMembersForCurrentUser("team_1");
+    expect(result.members).toEqual([]);
+  });
+
+  it("denies roster access for non-members", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "user_1" },
+    });
+    prismaMock.teamMembership.findUnique.mockResolvedValue(null);
+
+    await expect(
+      saveTeamMembersForCurrentUser({
+        teamId: "team_2",
+        members: [
+          { id: "m1", name: "A", unavailableDates: [] },
+          { id: "m2", name: "B", unavailableDates: [] },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(TeamAccessDeniedError);
+  });
+
+  it("supports save then load then schedule generation with loaded roster", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "user_1" },
+    });
+    prismaMock.teamMembership.findUnique.mockResolvedValue({ id: "membership_1" });
+    prismaMock.teamRoster.upsert.mockResolvedValue({});
+    prismaMock.teamRoster.findUnique.mockResolvedValue({
+      members: [
+        {
+          id: "member_a",
+          name: "Alice",
+          unavailableDates: ["2026-05-01"],
+        },
+        {
+          id: "member_b",
+          name: "Bob",
+          unavailableDates: [],
+        },
+      ],
+    });
+
+    await saveTeamMembersForCurrentUser({
+      teamId: "team_1",
+      members: [
+        {
+          id: "member_a",
+          name: "Alice",
+          unavailableDates: ["2026-05-01"],
+        },
+        {
+          id: "member_b",
+          name: "Bob",
+          unavailableDates: [],
+        },
+      ],
+    });
+
+    const loaded = await loadTeamMembersForCurrentUser("team_1");
+    const schedule = await calculateSchedule({
+      startDate: "2026-05-01",
+      endDate: "2026-05-07",
+      holidayCountry: "US",
+      members: loaded.members,
+    });
+
+    expect(schedule.ok).toBe(true);
+    if (schedule.ok) {
+      expect(schedule.data.assignments.length).toBeGreaterThan(0);
+      expect(schedule.data.report).toHaveLength(2);
+    }
   });
 });
