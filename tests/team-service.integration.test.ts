@@ -92,6 +92,8 @@ describe("team service integration behaviors", () => {
       },
     });
     expect(result.ownerRole).toBe("OWNER");
+    expect(result.currentUserRole).toBe("OWNER");
+    expect(result.canManageRoster).toBe(true);
     expect(result.memberCount).toBe(1);
   });
 
@@ -138,7 +140,36 @@ describe("team service integration behaviors", () => {
     });
     expect(result).toHaveLength(1);
     expect(result[0]?.ownerRole).toBe("OWNER");
+    expect(result[0]?.currentUserRole).toBe("OWNER");
+    expect(result[0]?.canManageRoster).toBe(true);
     expect(result[0]?.memberCount).toBe(2);
+  });
+
+  it("lists member teams as read-only for roster management", async () => {
+    authMock.mockResolvedValue({
+      user: {
+        id: "user_2",
+      },
+    });
+
+    prismaMock.team.findMany.mockResolvedValue([
+      {
+        id: "team_1",
+        name: "Ops Team",
+        ownerId: "user_1",
+        createdAt: new Date("2026-04-24T12:00:00.000Z"),
+        updatedAt: new Date("2026-04-24T12:00:00.000Z"),
+        memberships: [
+          { userId: "user_1", role: "OWNER" },
+          { userId: "user_2", role: "MEMBER" },
+        ],
+      },
+    ]);
+
+    const result = await listTeamsForCurrentUser();
+
+    expect(result[0]?.currentUserRole).toBe("MEMBER");
+    expect(result[0]?.canManageRoster).toBe(false);
   });
 
   it("denies unauthenticated users for team persistence operations", async () => {
