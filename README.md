@@ -26,6 +26,20 @@ npm install
 npm run dev
 ```
 
+### Auth + database bootstrap (SCA0001)
+
+This repo now includes Auth.js + Prisma infrastructure for email/password auth while keeping anonymous scheduling open.
+
+1. Copy `.env.example` to `.env`.
+
+2. Update `DATABASE_URL` and `AUTH_SECRET` in `.env`.
+3. Initialize Prisma:
+
+```bash
+npm run prisma:migrate -- --name init_auth
+npm run prisma:generate
+```
+
 Open [http://localhost:3000](http://localhost:3000). Edit the main screen in `app/page.tsx`; schedule calculation runs through the server action in `app/actions/schedule.ts`.
 
 ### Scripts
