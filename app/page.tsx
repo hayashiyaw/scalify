@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 
 import { calculateSchedule } from "@/app/actions/schedule";
@@ -15,6 +15,11 @@ import { ThemeSelector } from "@/components/theme-selector";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { addDays, formatISODateOnly } from "@/lib/schedule/dates";
+import {
+  clearScheduleDraft,
+  loadScheduleDraft,
+  saveScheduleDraft,
+} from "@/lib/schedule/draft-storage";
 import type { HolidayCountry, ScheduleResult } from "@/lib/schedule/types";
 import { scheduleInputSchema } from "@/lib/schedule/types";
 
@@ -45,6 +50,7 @@ export default function Home() {
   const [holidayCountry, setHolidayCountry] = useState<HolidayCountry>("US");
   const [members, setMembers] = useState<TeamMemberForm[]>(initialMembers);
   const [colorblindMode, setColorblindMode] = useState(false);
+  const [hasHydratedDraft, setHasHydratedDraft] = useState(false);
 
   const [result, setResult] = useState<ScheduleResult | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -84,6 +90,43 @@ export default function Home() {
       setResult(res.data);
     });
   }, [payload]);
+
+  useEffect(() => {
+    const draft = loadScheduleDraft();
+    if (!draft) {
+      setHasHydratedDraft(true);
+      return;
+    }
+    setStartDate(draft.startDate);
+    setEndDate(draft.endDate);
+    setHolidayCountry(draft.holidayCountry);
+    setMembers(draft.members);
+    setColorblindMode(draft.colorblindMode);
+    setHasHydratedDraft(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hasHydratedDraft) return;
+    saveScheduleDraft({
+      startDate,
+      endDate,
+      holidayCountry,
+      members,
+      colorblindMode,
+    });
+  }, [colorblindMode, endDate, hasHydratedDraft, holidayCountry, members, startDate]);
+
+  const resetDraft = useCallback(() => {
+    const defaults = defaultRange();
+    clearScheduleDraft();
+    setStartDate(defaults.start);
+    setEndDate(defaults.end);
+    setHolidayCountry("US");
+    setMembers(initialMembers());
+    setColorblindMode(false);
+    setResult(null);
+    setActionError(null);
+  }, []);
 
   const addMember = useCallback(() => {
     setMembers((prev) => [...prev, newMember()]);
@@ -172,6 +215,9 @@ export default function Home() {
               </span>
             </button>
             <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="ghost" onClick={resetDraft}>
+                Reset draft
+              </Button>
               <ExportCsvButton
                 holidayCountry={holidayCountry}
                 rangeStart={startDate}
