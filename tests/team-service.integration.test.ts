@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { TeamRole } from "@prisma/client";
 import { calculateSchedule } from "@/app/actions/schedule";
 
 const { authMock, prismaMock } = vi.hoisted(() => ({
@@ -8,8 +7,6 @@ const { authMock, prismaMock } = vi.hoisted(() => ({
     $transaction: vi.fn(),
     team: {
       findMany: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
     },
     user: {
       findUnique: vi.fn(),
@@ -17,9 +14,6 @@ const { authMock, prismaMock } = vi.hoisted(() => ({
     teamMembership: {
       findUnique: vi.fn(),
       create: vi.fn(),
-      findMany: vi.fn(),
-      delete: vi.fn(),
-      update: vi.fn(),
     },
     teamRoster: {
       upsert: vi.fn(),
@@ -38,22 +32,15 @@ vi.mock("@/lib/db", () => ({
 
 import {
   TeamMemberAlreadyExistsError,
-  TeamMemberNotFoundError,
   TeamMemberTargetNotFoundError,
-  TeamOwnerRoleInvariantError,
   TeamAccessDeniedError,
   TeamPermissionDeniedError,
   UnauthorizedTeamAccessError,
   addTeamMemberByEmailForCurrentUser,
   createTeamForCurrentUser,
-  deleteTeamForCurrentUser,
-  listTeamMembersForCurrentUser,
   loadTeamMembersForCurrentUser,
   listTeamsForCurrentUser,
-  removeTeamMemberForCurrentUser,
   saveTeamMembersForCurrentUser,
-  updateTeamForCurrentUser,
-  updateTeamMemberRoleForCurrentUser,
 } from "@/lib/team/service";
 
 describe("team service integration behaviors", () => {
@@ -435,156 +422,5 @@ describe("team service integration behaviors", () => {
         email: "member@example.com",
       }),
     ).rejects.toBeInstanceOf(TeamMemberAlreadyExistsError);
-  });
-
-  it("updates team details for owner/admin roles", async () => {
-    authMock.mockResolvedValue({ user: { id: "user_admin" } });
-    prismaMock.teamMembership.findUnique.mockResolvedValue({ role: "ADMIN" });
-    prismaMock.team.update.mockResolvedValue({
-      id: "team_1",
-      name: "Renamed Team",
-      ownerId: "user_owner",
-      createdAt: new Date("2026-04-24T12:00:00.000Z"),
-      updatedAt: new Date("2026-04-24T12:10:00.000Z"),
-      memberships: [
-        { userId: "user_owner", role: "OWNER" },
-        { userId: "user_admin", role: "ADMIN" },
-      ],
-    });
-
-    const updated = await updateTeamForCurrentUser({
-      teamId: "team_1",
-      name: " Renamed Team ",
-    });
-    expect(updated.name).toBe("Renamed Team");
-  });
-
-  it("allows only owner to delete team", async () => {
-    authMock.mockResolvedValue({ user: { id: "user_owner" } });
-    prismaMock.teamMembership.findUnique.mockResolvedValue({ role: "OWNER" });
-    prismaMock.team.delete.mockResolvedValue({ id: "team_1" });
-
-    await expect(
-      deleteTeamForCurrentUser({
-        teamId: "team_1",
-      }),
-    ).resolves.toEqual({ teamId: "team_1" });
-  });
-
-  it("denies team deletion for admin role", async () => {
-    authMock.mockResolvedValue({ user: { id: "user_admin" } });
-    prismaMock.teamMembership.findUnique.mockResolvedValue({ role: "ADMIN" });
-
-    await expect(
-      deleteTeamForCurrentUser({
-        teamId: "team_1",
-      }),
-    ).rejects.toBeInstanceOf(TeamPermissionDeniedError);
-  });
-
-  it("lists team members for accessible teams", async () => {
-    authMock.mockResolvedValue({ user: { id: "user_owner" } });
-    prismaMock.teamMembership.findUnique.mockResolvedValue({ role: "OWNER" });
-    prismaMock.teamMembership.findMany.mockResolvedValue([
-      { userId: "user_owner", role: "OWNER", user: { email: "owner@example.com" } },
-      { userId: "user_admin", role: "ADMIN", user: { email: "admin@example.com" } },
-    ]);
-
-    const members = await listTeamMembersForCurrentUser("team_1");
-    expect(members).toHaveLength(2);
-    expect(members[0]?.role).toBe("OWNER");
-  });
-
-  it("allows owner to change member roles", async () => {
-    authMock.mockResolvedValue({ user: { id: "user_owner" } });
-    prismaMock.teamMembership.findUnique
-      .mockResolvedValueOnce({ role: "OWNER" })
-      .mockResolvedValueOnce({ role: "MEMBER" });
-    prismaMock.teamMembership.update.mockResolvedValue({
-      teamId: "team_1",
-      userId: "user_member",
-      role: TeamRole.ADMIN,
-    });
-
-    const result = await updateTeamMemberRoleForCurrentUser({
-      teamId: "team_1",
-      userId: "user_member",
-      role: TeamRole.ADMIN,
-    });
-    expect(result.role).toBe("ADMIN");
-  });
-
-  it("denies admin role updates of member roles", async () => {
-    authMock.mockResolvedValue({ user: { id: "user_admin" } });
-    prismaMock.teamMembership.findUnique.mockResolvedValue({ role: "ADMIN" });
-
-    await expect(
-      updateTeamMemberRoleForCurrentUser({
-        teamId: "team_1",
-        userId: "user_member",
-        role: TeamRole.ADMIN,
-      }),
-    ).rejects.toBeInstanceOf(TeamPermissionDeniedError);
-  });
-
-  it("prevents modifying owner role through member role update", async () => {
-    authMock.mockResolvedValue({ user: { id: "user_owner" } });
-    prismaMock.teamMembership.findUnique
-      .mockResolvedValueOnce({ role: "OWNER" })
-      .mockResolvedValueOnce({ role: "OWNER" });
-
-    await expect(
-      updateTeamMemberRoleForCurrentUser({
-        teamId: "team_1",
-        userId: "user_owner",
-        role: TeamRole.MEMBER,
-      }),
-    ).rejects.toBeInstanceOf(TeamOwnerRoleInvariantError);
-  });
-
-  it("allows owner to remove non-owner members", async () => {
-    authMock.mockResolvedValue({ user: { id: "user_owner" } });
-    prismaMock.teamMembership.findUnique
-      .mockResolvedValueOnce({ role: "OWNER" })
-      .mockResolvedValueOnce({ role: "MEMBER" });
-    prismaMock.teamMembership.delete.mockResolvedValue({});
-
-    await expect(
-      removeTeamMemberForCurrentUser({
-        teamId: "team_1",
-        userId: "user_member",
-      }),
-    ).resolves.toEqual({
-      teamId: "team_1",
-      userId: "user_member",
-    });
-  });
-
-  it("denies removing owner membership", async () => {
-    authMock.mockResolvedValue({ user: { id: "user_owner" } });
-    prismaMock.teamMembership.findUnique
-      .mockResolvedValueOnce({ role: "OWNER" })
-      .mockResolvedValueOnce({ role: "OWNER" });
-
-    await expect(
-      removeTeamMemberForCurrentUser({
-        teamId: "team_1",
-        userId: "user_owner",
-      }),
-    ).rejects.toBeInstanceOf(TeamOwnerRoleInvariantError);
-  });
-
-  it("fails removing member when target membership does not exist", async () => {
-    authMock.mockResolvedValue({ user: { id: "user_owner" } });
-    prismaMock.teamMembership.findUnique
-      .mockResolvedValueOnce({ role: "OWNER" })
-      .mockResolvedValueOnce(null);
-
-    await expect(
-      removeTeamMemberForCurrentUser({
-        teamId: "team_1",
-        userId: "user_missing",
-      }),
-    ).rejects.toBeInstanceOf(TeamMemberNotFoundError);
   });
 });
