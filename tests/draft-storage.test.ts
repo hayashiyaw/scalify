@@ -59,6 +59,46 @@ describe("schedule draft local persistence", () => {
     });
   });
 
+  it("saves and restores a one-member draft", () => {
+    installLocalStorageMock();
+
+    saveScheduleDraft({
+      startDate: "2026-04-01",
+      endDate: "2026-04-15",
+      holidayCountry: "US",
+      members: [{ id: "solo", name: "Jordan", unavailableDates: [] }],
+      colorblindMode: false,
+    });
+
+    expect(loadScheduleDraft()).toEqual({
+      startDate: "2026-04-01",
+      endDate: "2026-04-15",
+      holidayCountry: "US",
+      members: [{ id: "solo", name: "Jordan", unavailableDates: [] }],
+      colorblindMode: false,
+    });
+  });
+
+  it("saves and restores an empty-member draft", () => {
+    installLocalStorageMock();
+
+    saveScheduleDraft({
+      startDate: "2026-05-01",
+      endDate: "2026-05-07",
+      holidayCountry: "PT",
+      members: [],
+      colorblindMode: false,
+    });
+
+    expect(loadScheduleDraft()).toEqual({
+      startDate: "2026-05-01",
+      endDate: "2026-05-07",
+      holidayCountry: "PT",
+      members: [],
+      colorblindMode: false,
+    });
+  });
+
   it("restores null when persisted data is invalid", () => {
     const localStorage = installLocalStorageMock();
     localStorage.setItem(
