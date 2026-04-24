@@ -28,6 +28,7 @@ vi.mock("@/lib/db", () => ({
 
 import {
   TeamAccessDeniedError,
+  TeamPermissionDeniedError,
   UnauthorizedTeamAccessError,
   createTeamForCurrentUser,
   loadTeamMembersForCurrentUser,
@@ -155,7 +156,7 @@ describe("team service integration behaviors", () => {
     authMock.mockResolvedValue({
       user: { id: "user_1" },
     });
-    prismaMock.teamMembership.findUnique.mockResolvedValue({ id: "membership_1" });
+    prismaMock.teamMembership.findUnique.mockResolvedValue({ role: "OWNER" });
     prismaMock.teamRoster.upsert.mockResolvedValue({});
 
     const result = await saveTeamMembersForCurrentUser({
@@ -181,7 +182,7 @@ describe("team service integration behaviors", () => {
           userId: "user_1",
         },
       },
-      select: { id: true },
+      select: { role: true },
     });
     expect(prismaMock.teamRoster.upsert).toHaveBeenCalledWith({
       where: { teamId: "team_1" },
@@ -200,7 +201,7 @@ describe("team service integration behaviors", () => {
     authMock.mockResolvedValue({
       user: { id: "user_1" },
     });
-    prismaMock.teamMembership.findUnique.mockResolvedValue({ id: "membership_1" });
+    prismaMock.teamMembership.findUnique.mockResolvedValue({ role: "OWNER" });
     prismaMock.teamRoster.findUnique.mockResolvedValue(null);
 
     const result = await loadTeamMembersForCurrentUser("team_1");
@@ -224,11 +225,44 @@ describe("team service integration behaviors", () => {
     ).rejects.toBeInstanceOf(TeamAccessDeniedError);
   });
 
+  it("denies roster writes for members without write permission", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "user_1" },
+    });
+    prismaMock.teamMembership.findUnique.mockResolvedValue({ role: "MEMBER" });
+
+    await expect(
+      saveTeamMembersForCurrentUser({
+        teamId: "team_1",
+        members: [
+          { id: "m1", name: "A", unavailableDates: [] },
+          { id: "m2", name: "B", unavailableDates: [] },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(TeamPermissionDeniedError);
+  });
+
+  it("allows roster reads for member role", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "user_1" },
+    });
+    prismaMock.teamMembership.findUnique.mockResolvedValue({ role: "MEMBER" });
+    prismaMock.teamRoster.findUnique.mockResolvedValue({
+      members: [
+        { id: "m1", name: "Alice", unavailableDates: [] },
+        { id: "m2", name: "Bob", unavailableDates: [] },
+      ],
+    });
+
+    const loaded = await loadTeamMembersForCurrentUser("team_1");
+    expect(loaded.members).toHaveLength(2);
+  });
+
   it("supports save then load then schedule generation with loaded roster", async () => {
     authMock.mockResolvedValue({
       user: { id: "user_1" },
     });
-    prismaMock.teamMembership.findUnique.mockResolvedValue({ id: "membership_1" });
+    prismaMock.teamMembership.findUnique.mockResolvedValue({ role: "OWNER" });
     prismaMock.teamRoster.upsert.mockResolvedValue({});
     prismaMock.teamRoster.findUnique.mockResolvedValue({
       members: [

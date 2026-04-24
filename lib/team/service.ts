@@ -4,6 +4,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { scheduleMemberSchema, type ScheduleMember } from "@/lib/schedule/types";
+import { canTeamRole, type TeamPermission } from "@/lib/team/rbac";
 
 const createTeamInputSchema = z.object({
   name: z.string().trim().min(1, "Team name is required."),
@@ -42,6 +43,13 @@ export class TeamAccessDeniedError extends Error {
   constructor() {
     super("You do not have access to this team.");
     this.name = "TeamAccessDeniedError";
+  }
+}
+
+export class TeamPermissionDeniedError extends Error {
+  constructor() {
+    super("You do not have permission for this team action.");
+    this.name = "TeamPermissionDeniedError";
   }
 }
 
@@ -119,7 +127,7 @@ export async function saveTeamMembersForCurrentUser(
   const userId = await requireUserId();
   const parsed = saveTeamMembersInputSchema.parse(raw);
 
-  await assertTeamMembership(parsed.teamId, userId);
+  await assertTeamPermission(parsed.teamId, userId, "team:roster:write");
 
   const members = parsed.members.map((member) => ({
     id: member.id,
@@ -170,7 +178,7 @@ export async function loadTeamMembersForCurrentUser(
   const userId = await requireUserId();
   const parsedTeamId = z.string().min(1, "Team is required.").parse(teamId);
 
-  await assertTeamMembership(parsedTeamId, userId);
+  await assertTeamPermission(parsedTeamId, userId, "team:roster:read");
 
   const roster = await prisma.teamRoster.findUnique({
     where: { teamId: parsedTeamId },
@@ -204,7 +212,11 @@ async function requireUserId(): Promise<string> {
   throw new UnauthorizedTeamAccessError();
 }
 
-async function assertTeamMembership(teamId: string, userId: string): Promise<void> {
+async function assertTeamPermission(
+  teamId: string,
+  userId: string,
+  permission: TeamPermission,
+): Promise<void> {
   const membership = await prisma.teamMembership.findUnique({
     where: {
       teamId_userId: {
@@ -212,11 +224,15 @@ async function assertTeamMembership(teamId: string, userId: string): Promise<voi
         userId,
       },
     },
-    select: { id: true },
+    select: { role: true },
   });
 
   if (!membership) {
     throw new TeamAccessDeniedError();
+  }
+
+  if (!canTeamRole(membership.role, permission)) {
+    throw new TeamPermissionDeniedError();
   }
 }
 
