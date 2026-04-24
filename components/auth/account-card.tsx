@@ -32,7 +32,10 @@ export function AccountCard() {
             Signed in as <span className="font-medium">{session.user.email}</span>
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-wrap gap-2">
+          <Link href="/teams" className={buttonVariants({ variant: "secondary" })}>
+            Manage teams
+          </Link>
           <Button
             type="button"
             variant="outline"

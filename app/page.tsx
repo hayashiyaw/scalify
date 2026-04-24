@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
+import Link from "next/link";
 
 import { calculateSchedule } from "@/app/actions/schedule";
 import { AccountCard } from "@/components/auth/account-card";
@@ -185,6 +186,13 @@ export default function Home() {
           onNameChange={updateName}
           onUnavailableChange={updateUnavailable}
         />
+        <div className="text-muted-foreground text-sm">
+          Team management moved to{" "}
+          <Link href="/teams" className="text-primary underline-offset-4 hover:underline">
+            Team workspace
+          </Link>
+          . Use that page to save and load shared availability.
+        </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-muted-foreground text-sm">

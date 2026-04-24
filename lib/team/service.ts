@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
+import { scheduleMemberSchema, type ScheduleMember } from "@/lib/schedule/types";
 
 const createTeamInputSchema = z.object({
   name: z.string().trim().min(1, "Team name is required."),
@@ -36,6 +37,18 @@ export class UnauthorizedTeamAccessError extends Error {
     this.name = "UnauthorizedTeamAccessError";
   }
 }
+
+export class TeamAccessDeniedError extends Error {
+  constructor() {
+    super("You do not have access to this team.");
+    this.name = "TeamAccessDeniedError";
+  }
+}
+
+const saveTeamMembersInputSchema = z.object({
+  teamId: z.string().min(1, "Team is required."),
+  members: z.array(scheduleMemberSchema).min(2, "Add at least two team members."),
+});
 
 export async function createTeamForCurrentUser(
   raw: unknown,
@@ -100,13 +113,111 @@ export async function listTeamsForCurrentUser(): Promise<TeamSummary[]> {
   return teams.map(toTeamSummary);
 }
 
+export async function saveTeamMembersForCurrentUser(
+  raw: unknown,
+): Promise<{ teamId: string; members: ScheduleMember[] }> {
+  const userId = await requireUserId();
+  const parsed = saveTeamMembersInputSchema.parse(raw);
+
+  await assertTeamMembership(parsed.teamId, userId);
+
+  const members = parsed.members.map((member) => ({
+    id: member.id,
+    name: member.name.trim(),
+    unavailableDates: [...member.unavailableDates].sort(),
+  }));
+
+  const duplicateNames = new Set<string>();
+  const seenNames = new Set<string>();
+  for (const member of members) {
+    const normalized = member.name.toLowerCase();
+    if (seenNames.has(normalized)) {
+      duplicateNames.add(member.name);
+    }
+    seenNames.add(normalized);
+  }
+
+  if (duplicateNames.size > 0) {
+    throw new z.ZodError([
+      {
+        code: "custom",
+        path: ["members"],
+        message: "Member names must be unique for the selected team.",
+      },
+    ]);
+  }
+
+  await prisma.teamRoster.upsert({
+    where: { teamId: parsed.teamId },
+    create: {
+      teamId: parsed.teamId,
+      members,
+    },
+    update: {
+      members,
+    },
+  });
+
+  return {
+    teamId: parsed.teamId,
+    members,
+  };
+}
+
+export async function loadTeamMembersForCurrentUser(
+  teamId: string,
+): Promise<{ teamId: string; members: ScheduleMember[] }> {
+  const userId = await requireUserId();
+  const parsedTeamId = z.string().min(1, "Team is required.").parse(teamId);
+
+  await assertTeamMembership(parsedTeamId, userId);
+
+  const roster = await prisma.teamRoster.findUnique({
+    where: { teamId: parsedTeamId },
+    select: { members: true },
+  });
+
+  const members = z.array(scheduleMemberSchema).parse(roster?.members ?? []);
+  return {
+    teamId: parsedTeamId,
+    members,
+  };
+}
+
 async function requireUserId(): Promise<string> {
   const session = await auth();
-  const userId = (session?.user as { id?: string } | undefined)?.id;
-  if (!userId) {
-    throw new UnauthorizedTeamAccessError();
+  const user = session?.user as { id?: string; email?: string } | undefined;
+  if (user?.id) {
+    return user.id;
   }
-  return userId;
+
+  if (user?.email) {
+    const dbUser = await prisma.user.findUnique({
+      where: { email: user.email.toLowerCase() },
+      select: { id: true },
+    });
+    if (dbUser?.id) {
+      return dbUser.id;
+    }
+  }
+
+  throw new UnauthorizedTeamAccessError();
+}
+
+async function assertTeamMembership(teamId: string, userId: string): Promise<void> {
+  const membership = await prisma.teamMembership.findUnique({
+    where: {
+      teamId_userId: {
+        teamId,
+        userId,
+      },
+    },
+    select: { id: true },
+  });
+
+  if (!membership) {
+    throw new TeamAccessDeniedError();
+  }
 }
 
 function toTeamSummary(team: TeamWithMemberships): TeamSummary {
