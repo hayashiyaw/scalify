@@ -46,6 +46,35 @@ function defaultMembers() {
   ];
 }
 
+function ensureMinimumMembers(
+  members: Array<{ id: string; name: string; unavailableDates: string[] }>,
+) {
+  if (members.length >= 2) {
+    return members;
+  }
+  const fallback = defaultMembers();
+  if (members.length === 1) {
+    return [members[0], fallback[1]];
+  }
+  return fallback;
+}
+
+function getCurrentDraft() {
+  const draft = loadScheduleDraft();
+  if (draft) {
+    return draft;
+  }
+
+  const defaults = defaultRange();
+  return {
+    startDate: defaults.start,
+    endDate: defaults.end,
+    holidayCountry: "US" as const,
+    members: defaultMembers(),
+    colorblindMode: false,
+  };
+}
+
 export default function TeamsPage() {
   const { status: sessionStatus } = useSession();
   const [pending, startTransition] = useTransition();
@@ -54,22 +83,6 @@ export default function TeamsPage() {
   const [teamError, setTeamError] = useState<string | null>(null);
   const [teamNotice, setTeamNotice] = useState<string | null>(null);
   const [memberEmail, setMemberEmail] = useState("");
-
-  const localDraft = useMemo(() => {
-    const draft = loadScheduleDraft();
-    if (draft) {
-      return draft;
-    }
-
-    const defaults = defaultRange();
-    return {
-      startDate: defaults.start,
-      endDate: defaults.end,
-      holidayCountry: "US" as const,
-      members: defaultMembers(),
-      colorblindMode: false,
-    };
-  }, []);
 
   useEffect(() => {
     if (sessionStatus !== "authenticated") {
@@ -121,7 +134,7 @@ export default function TeamsPage() {
     startTransition(async () => {
       const response = await saveTeamMembersAction({
         teamId: selectedTeamId,
-        members: localDraft.members.map((member) => ({
+        members: getCurrentDraft().members.map((member) => ({
           id: member.id,
           name: member.name.trim(),
           unavailableDates: member.unavailableDates,
@@ -139,7 +152,7 @@ export default function TeamsPage() {
 
       setTeamNotice("Saved current scheduler members and availability to this team.");
     });
-  }, [canSaveFromDraft, localDraft.members, selectedTeamId]);
+  }, [canSaveFromDraft, selectedTeamId]);
 
   const loadToSchedulerDraft = useCallback(() => {
     if (!selectedTeamId) {
@@ -157,18 +170,18 @@ export default function TeamsPage() {
       }
 
       saveScheduleDraft({
-        ...localDraft,
-        members:
-          response.data.members.length >= 2 ? response.data.members : defaultMembers(),
+        ...getCurrentDraft(),
+        members: ensureMinimumMembers(response.data.members),
       });
 
-      setTeamNotice(
-        response.data.members.length > 0
-          ? "Loaded team availability into your scheduler draft. Open Home to continue."
-          : "This team has no saved availability yet.",
-      );
+      if (response.data.members.length > 0) {
+        window.location.assign("/");
+        return;
+      }
+
+      setTeamNotice("This team has no saved availability yet.");
     });
-  }, [localDraft, selectedTeamId]);
+  }, [selectedTeamId]);
 
   const addMemberByEmail = useCallback(() => {
     if (!selectedTeamId) {
