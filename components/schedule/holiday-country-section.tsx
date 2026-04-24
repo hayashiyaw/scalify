@@ -32,14 +32,15 @@ export function HolidayCountrySection({ value, onChange }: Props) {
         <Label htmlFor="holiday-country">Country calendar</Label>
         <Select
           value={value}
+          items={OPTIONS}
           onValueChange={(v) => onChange(v as HolidayCountry)}
         >
-          <SelectTrigger id="holiday-country" className="w-full max-w-sm">
-            <SelectValue />
+          <SelectTrigger id="holiday-country" className="w-full min-w-0 max-w-sm">
+            <SelectValue placeholder="Country calendar" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent align="start" alignItemWithTrigger={false} className="max-h-72">
             {OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
+              <SelectItem key={o.value} value={o.value} label={o.label}>
                 {o.label}
               </SelectItem>
             ))}

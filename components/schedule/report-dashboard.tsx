@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   Card,
@@ -37,7 +37,20 @@ type Props = {
 
 const ALL_VALUE = "all";
 
-export function ReportDashboard({
+function reportScopeKey(
+  report: PersonReport[],
+  rangeStart: string,
+  rangeEnd: string,
+): string {
+  return `${rangeStart}|${rangeEnd}|${report
+    .map(
+      (r) =>
+        `${r.memberId}:${r.weekdayDays}:${r.weekendHolidayDays}:${r.totalHours}`,
+    )
+    .join(";")}`;
+}
+
+function ReportDashboardInner({
   report,
   assignments,
   members,
@@ -53,10 +66,6 @@ export function ReportDashboard({
   const showMonthFilter = monthOptions.length > 1;
 
   const [monthFilter, setMonthFilter] = useState<string>(ALL_VALUE);
-
-  useEffect(() => {
-    setMonthFilter(ALL_VALUE);
-  }, [report, rangeStart, rangeEnd]);
 
   const displayReport = useMemo(() => {
     if (!showMonthFilter || monthFilter === ALL_VALUE) return report;
@@ -147,4 +156,12 @@ export function ReportDashboard({
       </CardContent>
     </Card>
   );
+}
+
+export function ReportDashboard(props: Props) {
+  const scopeKey = useMemo(
+    () => reportScopeKey(props.report, props.rangeStart, props.rangeEnd),
+    [props.report, props.rangeStart, props.rangeEnd],
+  );
+  return <ReportDashboardInner key={scopeKey} {...props} />;
 }
