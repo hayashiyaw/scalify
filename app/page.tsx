@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 
 import { calculateSchedule } from "@/app/actions/schedule";
+import { AccountCard } from "@/components/auth/account-card";
 import { DateRangeSection } from "@/components/schedule/date-range-section";
 import { ExportCsvButton } from "@/components/schedule/export-csv-button";
 import { HolidayCountrySection } from "@/components/schedule/holiday-country-section";
@@ -118,6 +119,8 @@ export default function Home() {
           </div>
           <ThemeSelector />
         </header>
+
+        <AccountCard />
 
         <div className="grid gap-6 lg:grid-cols-2">
           <DateRangeSection
