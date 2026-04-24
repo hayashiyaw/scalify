@@ -11,10 +11,13 @@ describe("team role permission matrix", () => {
   }> = [
     { role: TeamRole.OWNER, permission: "team:roster:read", allowed: true },
     { role: TeamRole.OWNER, permission: "team:roster:write", allowed: true },
+    { role: TeamRole.OWNER, permission: "team:members:write", allowed: true },
     { role: TeamRole.ADMIN, permission: "team:roster:read", allowed: true },
     { role: TeamRole.ADMIN, permission: "team:roster:write", allowed: true },
+    { role: TeamRole.ADMIN, permission: "team:members:write", allowed: true },
     { role: TeamRole.MEMBER, permission: "team:roster:read", allowed: true },
     { role: TeamRole.MEMBER, permission: "team:roster:write", allowed: false },
+    { role: TeamRole.MEMBER, permission: "team:members:write", allowed: false },
   ];
 
   for (const entry of matrix) {

@@ -57,6 +57,20 @@ export default function Home() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  const hydrateFromDraft = useCallback(() => {
+    const draft = loadScheduleDraft();
+    if (!draft) {
+      setHasHydratedDraft(true);
+      return;
+    }
+    setStartDate(draft.startDate);
+    setEndDate(draft.endDate);
+    setHolidayCountry(draft.holidayCountry);
+    setMembers(draft.members);
+    setColorblindMode(draft.colorblindMode);
+    setHasHydratedDraft(true);
+  }, []);
+
   const payload = useMemo(
     () => ({
       startDate,
@@ -93,18 +107,26 @@ export default function Home() {
   }, [payload]);
 
   useEffect(() => {
-    const draft = loadScheduleDraft();
-    if (!draft) {
-      setHasHydratedDraft(true);
-      return;
+    hydrateFromDraft();
+  }, [hydrateFromDraft]);
+
+  useEffect(() => {
+    function handlePageSync(): void {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+      hydrateFromDraft();
     }
-    setStartDate(draft.startDate);
-    setEndDate(draft.endDate);
-    setHolidayCountry(draft.holidayCountry);
-    setMembers(draft.members);
-    setColorblindMode(draft.colorblindMode);
-    setHasHydratedDraft(true);
-  }, []);
+
+    window.addEventListener("focus", handlePageSync);
+    window.addEventListener("pageshow", handlePageSync);
+    document.addEventListener("visibilitychange", handlePageSync);
+    return () => {
+      window.removeEventListener("focus", handlePageSync);
+      window.removeEventListener("pageshow", handlePageSync);
+      document.removeEventListener("visibilitychange", handlePageSync);
+    };
+  }, [hydrateFromDraft]);
 
   useEffect(() => {
     if (!hasHydratedDraft) return;

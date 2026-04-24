@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { useSession } from "next-auth/react";
 
 import {
+  addTeamMemberByEmailAction,
   listTeamsAction,
   loadTeamMembersAction,
   saveTeamMembersAction,
@@ -15,6 +16,7 @@ import { ThemeSelector } from "@/components/theme-selector";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -44,6 +46,35 @@ function defaultMembers() {
   ];
 }
 
+function ensureMinimumMembers(
+  members: Array<{ id: string; name: string; unavailableDates: string[] }>,
+) {
+  if (members.length >= 2) {
+    return members;
+  }
+  const fallback = defaultMembers();
+  if (members.length === 1) {
+    return [members[0], fallback[1]];
+  }
+  return fallback;
+}
+
+function getCurrentDraft() {
+  const draft = loadScheduleDraft();
+  if (draft) {
+    return draft;
+  }
+
+  const defaults = defaultRange();
+  return {
+    startDate: defaults.start,
+    endDate: defaults.end,
+    holidayCountry: "US" as const,
+    members: defaultMembers(),
+    colorblindMode: false,
+  };
+}
+
 export default function TeamsPage() {
   const { status: sessionStatus } = useSession();
   const [pending, startTransition] = useTransition();
@@ -51,22 +82,7 @@ export default function TeamsPage() {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [teamError, setTeamError] = useState<string | null>(null);
   const [teamNotice, setTeamNotice] = useState<string | null>(null);
-
-  const localDraft = useMemo(() => {
-    const draft = loadScheduleDraft();
-    if (draft) {
-      return draft;
-    }
-
-    const defaults = defaultRange();
-    return {
-      startDate: defaults.start,
-      endDate: defaults.end,
-      holidayCountry: "US" as const,
-      members: defaultMembers(),
-      colorblindMode: false,
-    };
-  }, []);
+  const [memberEmail, setMemberEmail] = useState("");
 
   useEffect(() => {
     if (sessionStatus !== "authenticated") {
@@ -118,7 +134,7 @@ export default function TeamsPage() {
     startTransition(async () => {
       const response = await saveTeamMembersAction({
         teamId: selectedTeamId,
-        members: localDraft.members.map((member) => ({
+        members: getCurrentDraft().members.map((member) => ({
           id: member.id,
           name: member.name.trim(),
           unavailableDates: member.unavailableDates,
@@ -136,7 +152,7 @@ export default function TeamsPage() {
 
       setTeamNotice("Saved current scheduler members and availability to this team.");
     });
-  }, [canSaveFromDraft, localDraft.members, selectedTeamId]);
+  }, [canSaveFromDraft, selectedTeamId]);
 
   const loadToSchedulerDraft = useCallback(() => {
     if (!selectedTeamId) {
@@ -154,18 +170,58 @@ export default function TeamsPage() {
       }
 
       saveScheduleDraft({
-        ...localDraft,
-        members:
-          response.data.members.length >= 2 ? response.data.members : defaultMembers(),
+        ...getCurrentDraft(),
+        members: ensureMinimumMembers(response.data.members),
       });
 
-      setTeamNotice(
-        response.data.members.length > 0
-          ? "Loaded team availability into your scheduler draft. Open Home to continue."
-          : "This team has no saved availability yet.",
-      );
+      if (response.data.members.length > 0) {
+        window.location.assign("/");
+        return;
+      }
+
+      setTeamNotice("This team has no saved availability yet.");
     });
-  }, [localDraft, selectedTeamId]);
+  }, [selectedTeamId]);
+
+  const addMemberByEmail = useCallback(() => {
+    if (!selectedTeamId) {
+      setTeamError("Select a team before adding a member.");
+      return;
+    }
+    if (!canSaveFromDraft) {
+      setTeamError("Your role does not allow adding members to this team.");
+      return;
+    }
+
+    setTeamError(null);
+    setTeamNotice(null);
+    startTransition(async () => {
+      const response = await addTeamMemberByEmailAction({
+        teamId: selectedTeamId,
+        email: memberEmail.trim(),
+      });
+
+      if (!response.ok) {
+        if (response.code === "target_user_not_found") {
+          setTeamError("No account exists with that email. Ask the user to register first.");
+          return;
+        }
+        if (response.code === "already_member") {
+          setTeamError("That account is already a member of this team.");
+          return;
+        }
+        setTeamError(response.error);
+        return;
+      }
+
+      setMemberEmail("");
+      setTeamNotice(`Added ${response.data.email} as a member.`);
+      const refreshed = await listTeamsAction();
+      if (refreshed.ok) {
+        setTeams(refreshed.data);
+      }
+    });
+  }, [canSaveFromDraft, memberEmail, selectedTeamId]);
 
   return (
     <div className="bg-background min-h-full">
@@ -238,6 +294,32 @@ export default function TeamsPage() {
                 ) : null}
                 {teams.length === 0 ? (
                   <p className="text-muted-foreground text-sm">You are not in any teams yet.</p>
+                ) : null}
+                {teams.length > 0 ? (
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <Input
+                      type="email"
+                      value={memberEmail}
+                      onChange={(event) => setMemberEmail(event.target.value)}
+                      placeholder="Add existing user by email"
+                      disabled={pending || !selectedTeamId || !canSaveFromDraft}
+                      className="sm:w-80"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={addMemberByEmail}
+                      disabled={
+                        pending ||
+                        !selectedTeamId ||
+                        !canSaveFromDraft ||
+                        memberEmail.trim().length === 0
+                      }
+                    >
+                      {pending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+                      Add member
+                    </Button>
+                  </div>
                 ) : null}
               </>
             )}
