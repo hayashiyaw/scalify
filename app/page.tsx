@@ -107,7 +107,9 @@ export default function Home() {
   }, [payload]);
 
   useEffect(() => {
-    hydrateFromDraft();
+    queueMicrotask(() => {
+      hydrateFromDraft();
+    });
   }, [hydrateFromDraft]);
 
   useEffect(() => {

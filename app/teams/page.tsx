@@ -36,6 +36,11 @@ import { loadScheduleDraft, saveScheduleDraft } from "@/lib/schedule/draft-stora
 import { canSaveTeamRoster, teamRosterPermissionHint } from "@/lib/team/roster-ui";
 import type { TeamMemberSummary, TeamSummary } from "@/lib/team/service";
 
+const MEMBER_ROLE_SELECT_ITEMS: { value: TeamRole; label: string }[] = [
+  { value: TeamRole.ADMIN, label: "Admin" },
+  { value: TeamRole.MEMBER, label: "Member" },
+];
+
 function defaultRange(): { start: string; end: string } {
   const t = new Date();
   const start = new Date(t.getFullYear(), t.getMonth(), t.getDate(), 12, 0, 0);
@@ -137,6 +142,11 @@ export default function TeamsPage() {
   const selectedTeam = useMemo(
     () => teams.find((team) => team.id === selectedTeamId) ?? null,
     [selectedTeamId, teams],
+  );
+
+  const teamSelectItems = useMemo(
+    () => teams.map((team) => ({ value: team.id, label: team.name })),
+    [teams],
   );
 
   const canSaveFromDraft = canSaveTeamRoster(selectedTeam);
@@ -425,6 +435,7 @@ export default function TeamsPage() {
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <Select
                     value={selectedTeamId ?? ""}
+                    items={teamSelectItems}
                     onValueChange={(value) => {
                       setSelectedTeamId(value);
                       const team = teams.find((entry) => entry.id === value);
@@ -432,12 +443,12 @@ export default function TeamsPage() {
                     }}
                     disabled={teams.length === 0}
                   >
-                    <SelectTrigger className="w-full sm:w-80">
+                    <SelectTrigger className="w-full min-w-0 sm:w-80">
                       <SelectValue placeholder="Select a team" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent align="start" alignItemWithTrigger={false} className="max-h-72">
                       {teams.map((team) => (
-                        <SelectItem key={team.id} value={team.id}>
+                        <SelectItem key={team.id} value={team.id} label={team.name}>
                           {team.name}
                         </SelectItem>
                       ))}
@@ -543,27 +554,41 @@ export default function TeamsPage() {
                             key={member.userId}
                             className="flex flex-col gap-2 rounded border p-2 sm:flex-row sm:items-center sm:justify-between"
                           >
-                            <div className="text-sm">{member.email}</div>
-                            <div className="flex items-center gap-2">
-                              <Select
-                                value={member.role}
-                                onValueChange={(value) =>
-                                  updateMemberRole(member.userId, value as TeamRole)
-                                }
-                                disabled={
-                                  pending ||
-                                  !canUpdateMemberRoles ||
-                                  member.role === "OWNER"
-                                }
-                              >
-                                <SelectTrigger className="w-36">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="ADMIN">ADMIN</SelectItem>
-                                  <SelectItem value="MEMBER">MEMBER</SelectItem>
-                                </SelectContent>
-                              </Select>
+                            <div className="min-w-0 flex-1 truncate text-sm">{member.email}</div>
+                            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                              {member.role === TeamRole.OWNER ? (
+                                <span className="text-muted-foreground flex h-8 items-center px-2 text-sm">
+                                  Owner
+                                </span>
+                              ) : (
+                                <Select
+                                  value={member.role}
+                                  items={MEMBER_ROLE_SELECT_ITEMS}
+                                  onValueChange={(value) =>
+                                    updateMemberRole(member.userId, value as TeamRole)
+                                  }
+                                  disabled={pending || !canUpdateMemberRoles}
+                                >
+                                  <SelectTrigger className="min-w-0 w-full sm:w-36">
+                                    <SelectValue placeholder="Role" />
+                                  </SelectTrigger>
+                                  <SelectContent
+                                    align="end"
+                                    alignItemWithTrigger={false}
+                                    className="max-h-72"
+                                  >
+                                    {MEMBER_ROLE_SELECT_ITEMS.map((option) => (
+                                      <SelectItem
+                                        key={option.value}
+                                        value={option.value}
+                                        label={option.label}
+                                      >
+                                        {option.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              )}
                               <Button
                                 type="button"
                                 variant="ghost"
