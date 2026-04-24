@@ -29,12 +29,6 @@ export type SignupActionState = {
   };
 };
 
-export const initialSignupState: SignupActionState = {
-  message: null,
-  success: false,
-  fieldErrors: {},
-};
-
 export async function signupAction(
   _state: SignupActionState,
   formData: FormData,
