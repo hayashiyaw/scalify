@@ -4,12 +4,19 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import { useSession } from "next-auth/react";
+import { TeamRole } from "@prisma/client";
 
 import {
   addTeamMemberByEmailAction,
+  createTeamAction,
+  deleteTeamAction,
   listTeamsAction,
+  listTeamMembersAction,
   loadTeamMembersAction,
+  removeTeamMemberAction,
   saveTeamMembersAction,
+  updateTeamAction,
+  updateTeamMemberRoleAction,
 } from "@/app/actions/team";
 import { AccountCard } from "@/components/auth/account-card";
 import { ThemeSelector } from "@/components/theme-selector";
@@ -27,7 +34,7 @@ import {
 import { addDays, formatISODateOnly } from "@/lib/schedule/dates";
 import { loadScheduleDraft, saveScheduleDraft } from "@/lib/schedule/draft-storage";
 import { canSaveTeamRoster, teamRosterPermissionHint } from "@/lib/team/roster-ui";
-import type { TeamSummary } from "@/lib/team/service";
+import type { TeamMemberSummary, TeamSummary } from "@/lib/team/service";
 
 function defaultRange(): { start: string; end: string } {
   const t = new Date();
@@ -83,12 +90,12 @@ export default function TeamsPage() {
   const [teamError, setTeamError] = useState<string | null>(null);
   const [teamNotice, setTeamNotice] = useState<string | null>(null);
   const [memberEmail, setMemberEmail] = useState("");
+  const [newTeamName, setNewTeamName] = useState("");
+  const [renameTeamName, setRenameTeamName] = useState("");
+  const [teamMembers, setTeamMembers] = useState<TeamMemberSummary[]>([]);
 
   useEffect(() => {
     if (sessionStatus !== "authenticated") {
-      setTeams([]);
-      setSelectedTeamId(null);
-      setTeamError(null);
       return;
     }
 
@@ -111,6 +118,22 @@ export default function TeamsPage() {
     });
   }, [sessionStatus]);
 
+  useEffect(() => {
+    if (sessionStatus !== "authenticated" || !selectedTeamId) {
+      return;
+    }
+
+    startTransition(async () => {
+      const response = await listTeamMembersAction(selectedTeamId);
+      if (!response.ok) {
+        setTeamMembers([]);
+        setTeamError(response.error);
+        return;
+      }
+      setTeamMembers(response.data);
+    });
+  }, [selectedTeamId, sessionStatus]);
+
   const selectedTeam = useMemo(
     () => teams.find((team) => team.id === selectedTeamId) ?? null,
     [selectedTeamId, teams],
@@ -118,6 +141,28 @@ export default function TeamsPage() {
 
   const canSaveFromDraft = canSaveTeamRoster(selectedTeam);
   const rosterPermissionHint = teamRosterPermissionHint(selectedTeam);
+  const canManageTeamDetails = selectedTeam
+    ? selectedTeam.currentUserRole === "OWNER" || selectedTeam.currentUserRole === "ADMIN"
+    : false;
+  const canDeleteTeam = selectedTeam?.currentUserRole === "OWNER";
+  const canManageMembers = canSaveFromDraft;
+  const canUpdateMemberRoles = selectedTeam?.currentUserRole === "OWNER";
+
+  const refreshTeamsAndSelection = useCallback(async () => {
+    const refreshed = await listTeamsAction();
+    if (!refreshed.ok) {
+      setTeamError(refreshed.error);
+      return false;
+    }
+
+    setTeams(refreshed.data);
+    setSelectedTeamId((current) =>
+      current && refreshed.data.some((team) => team.id === current)
+        ? current
+        : (refreshed.data[0]?.id ?? null),
+    );
+    return true;
+  }, []);
 
   const saveCurrentDraft = useCallback(() => {
     if (!selectedTeamId) {
@@ -216,12 +261,120 @@ export default function TeamsPage() {
 
       setMemberEmail("");
       setTeamNotice(`Added ${response.data.email} as a member.`);
-      const refreshed = await listTeamsAction();
-      if (refreshed.ok) {
-        setTeams(refreshed.data);
-      }
+      await refreshTeamsAndSelection();
     });
-  }, [canSaveFromDraft, memberEmail, selectedTeamId]);
+  }, [canSaveFromDraft, memberEmail, refreshTeamsAndSelection, selectedTeamId]);
+
+  const createTeam = useCallback(() => {
+    const name = newTeamName.trim();
+    if (name.length === 0) {
+      setTeamError("Enter a team name before creating.");
+      return;
+    }
+
+    setTeamError(null);
+    setTeamNotice(null);
+    startTransition(async () => {
+      const response = await createTeamAction({ name });
+      if (!response.ok) {
+        setTeamError(response.error);
+        return;
+      }
+      setNewTeamName("");
+      setTeamNotice(`Created team ${response.data.name}.`);
+      await refreshTeamsAndSelection();
+      setSelectedTeamId(response.data.id);
+    });
+  }, [newTeamName, refreshTeamsAndSelection]);
+
+  const renameSelectedTeam = useCallback(() => {
+    if (!selectedTeamId) {
+      setTeamError("Select a team before renaming.");
+      return;
+    }
+
+    const name = renameTeamName.trim();
+    if (name.length === 0) {
+      setTeamError("Team name is required.");
+      return;
+    }
+
+    setTeamError(null);
+    setTeamNotice(null);
+    startTransition(async () => {
+      const response = await updateTeamAction({ teamId: selectedTeamId, name });
+      if (!response.ok) {
+        setTeamError(response.error);
+        return;
+      }
+      setTeamNotice(`Renamed team to ${response.data.name}.`);
+      await refreshTeamsAndSelection();
+    });
+  }, [refreshTeamsAndSelection, renameTeamName, selectedTeamId]);
+
+  const deleteSelectedTeam = useCallback(() => {
+    if (!selectedTeamId || !selectedTeam) {
+      setTeamError("Select a team before deleting.");
+      return;
+    }
+    if (!window.confirm(`Delete team "${selectedTeam.name}"? This cannot be undone.`)) {
+      return;
+    }
+
+    setTeamError(null);
+    setTeamNotice(null);
+    startTransition(async () => {
+      const response = await deleteTeamAction({ teamId: selectedTeamId });
+      if (!response.ok) {
+        setTeamError(response.error);
+        return;
+      }
+      setTeamNotice("Deleted team.");
+      await refreshTeamsAndSelection();
+    });
+  }, [refreshTeamsAndSelection, selectedTeam, selectedTeamId]);
+
+  const removeMember = useCallback(
+    (userId: string) => {
+      if (!selectedTeamId) return;
+      startTransition(async () => {
+        const response = await removeTeamMemberAction({ teamId: selectedTeamId, userId });
+        if (!response.ok) {
+          setTeamError(response.error);
+          return;
+        }
+        await refreshTeamsAndSelection();
+        const membersResponse = await listTeamMembersAction(selectedTeamId);
+        if (membersResponse.ok) {
+          setTeamMembers(membersResponse.data);
+        }
+      });
+    },
+    [refreshTeamsAndSelection, selectedTeamId],
+  );
+
+  const updateMemberRole = useCallback(
+    (userId: string, role: TeamRole) => {
+      if (!selectedTeamId) return;
+      startTransition(async () => {
+        const response = await updateTeamMemberRoleAction({
+          teamId: selectedTeamId,
+          userId,
+          role,
+        });
+        if (!response.ok) {
+          setTeamError(response.error);
+          return;
+        }
+        const membersResponse = await listTeamMembersAction(selectedTeamId);
+        if (membersResponse.ok) {
+          setTeamMembers(membersResponse.data);
+        }
+        await refreshTeamsAndSelection();
+      });
+    },
+    [refreshTeamsAndSelection, selectedTeamId],
+  );
 
   return (
     <div className="bg-background min-h-full">
@@ -253,9 +406,30 @@ export default function TeamsPage() {
             ) : (
               <>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Input
+                    value={newTeamName}
+                    onChange={(event) => setNewTeamName(event.target.value)}
+                    placeholder="New team name"
+                    disabled={pending}
+                    className="sm:w-80"
+                  />
+                  <Button
+                    type="button"
+                    onClick={createTeam}
+                    disabled={pending || newTeamName.trim().length === 0}
+                  >
+                    {pending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+                    Create team
+                  </Button>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <Select
                     value={selectedTeamId ?? ""}
-                    onValueChange={(value) => setSelectedTeamId(value)}
+                    onValueChange={(value) => {
+                      setSelectedTeamId(value);
+                      const team = teams.find((entry) => entry.id === value);
+                      setRenameTeamName(team?.name ?? "");
+                    }}
                     disabled={teams.length === 0}
                   >
                     <SelectTrigger className="w-full sm:w-80">
@@ -319,6 +493,94 @@ export default function TeamsPage() {
                       {pending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
                       Add member
                     </Button>
+                  </div>
+                ) : null}
+                {selectedTeam ? (
+                  <div className="space-y-3 rounded-md border p-3">
+                    <p className="text-muted-foreground text-sm">
+                      Team details: role <strong>{selectedTeam.currentUserRole}</strong>, members{" "}
+                      <strong>{selectedTeam.memberCount}</strong>.
+                    </p>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <Input
+                        value={renameTeamName}
+                        onChange={(event) => setRenameTeamName(event.target.value)}
+                        disabled={pending || !canManageTeamDetails}
+                        className="sm:w-80"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={renameSelectedTeam}
+                        disabled={
+                          pending ||
+                          !canManageTeamDetails ||
+                          renameTeamName.trim().length === 0
+                        }
+                      >
+                        Rename team
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={deleteSelectedTeam}
+                        disabled={pending || !canDeleteTeam}
+                      >
+                        Delete team
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+                {selectedTeam ? (
+                  <div className="space-y-2 rounded-md border p-3">
+                    <p className="text-sm font-medium">Members</p>
+                    {teamMembers.length === 0 ? (
+                      <p className="text-muted-foreground text-sm">No members found.</p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {teamMembers.map((member) => (
+                          <li
+                            key={member.userId}
+                            className="flex flex-col gap-2 rounded border p-2 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div className="text-sm">{member.email}</div>
+                            <div className="flex items-center gap-2">
+                              <Select
+                                value={member.role}
+                                onValueChange={(value) =>
+                                  updateMemberRole(member.userId, value as TeamRole)
+                                }
+                                disabled={
+                                  pending ||
+                                  !canUpdateMemberRoles ||
+                                  member.role === "OWNER"
+                                }
+                              >
+                                <SelectTrigger className="w-36">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="ADMIN">ADMIN</SelectItem>
+                                  <SelectItem value="MEMBER">MEMBER</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => removeMember(member.userId)}
+                                disabled={
+                                  pending ||
+                                  !canManageMembers ||
+                                  member.role === "OWNER"
+                                }
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 ) : null}
               </>

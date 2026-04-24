@@ -12,12 +12,21 @@ describe("team role permission matrix", () => {
     { role: TeamRole.OWNER, permission: "team:roster:read", allowed: true },
     { role: TeamRole.OWNER, permission: "team:roster:write", allowed: true },
     { role: TeamRole.OWNER, permission: "team:members:write", allowed: true },
+    { role: TeamRole.OWNER, permission: "team:update", allowed: true },
+    { role: TeamRole.OWNER, permission: "team:delete", allowed: true },
+    { role: TeamRole.OWNER, permission: "team:members:role:update", allowed: true },
     { role: TeamRole.ADMIN, permission: "team:roster:read", allowed: true },
     { role: TeamRole.ADMIN, permission: "team:roster:write", allowed: true },
     { role: TeamRole.ADMIN, permission: "team:members:write", allowed: true },
+    { role: TeamRole.ADMIN, permission: "team:update", allowed: true },
+    { role: TeamRole.ADMIN, permission: "team:delete", allowed: false },
+    { role: TeamRole.ADMIN, permission: "team:members:role:update", allowed: false },
     { role: TeamRole.MEMBER, permission: "team:roster:read", allowed: true },
     { role: TeamRole.MEMBER, permission: "team:roster:write", allowed: false },
     { role: TeamRole.MEMBER, permission: "team:members:write", allowed: false },
+    { role: TeamRole.MEMBER, permission: "team:update", allowed: false },
+    { role: TeamRole.MEMBER, permission: "team:delete", allowed: false },
+    { role: TeamRole.MEMBER, permission: "team:members:role:update", allowed: false },
   ];
 
   for (const entry of matrix) {
