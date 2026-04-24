@@ -69,6 +69,20 @@ export class TeamMemberAlreadyExistsError extends Error {
   }
 }
 
+export class TeamMemberNotFoundError extends Error {
+  constructor() {
+    super("This user is not a member of the selected team.");
+    this.name = "TeamMemberNotFoundError";
+  }
+}
+
+export class TeamOwnerRoleInvariantError extends Error {
+  constructor() {
+    super("Owner membership cannot be modified by this action.");
+    this.name = "TeamOwnerRoleInvariantError";
+  }
+}
+
 const saveTeamMembersInputSchema = z.object({
   teamId: z.string().min(1, "Team is required."),
   members: z.array(scheduleMemberSchema).min(2, "Add at least two team members."),
@@ -78,6 +92,32 @@ const addTeamMemberByEmailInputSchema = z.object({
   teamId: z.string().min(1, "Team is required."),
   email: z.string().trim().email("Provide a valid account email."),
 });
+
+const updateTeamInputSchema = z.object({
+  teamId: z.string().min(1, "Team is required."),
+  name: z.string().trim().min(1, "Team name is required."),
+});
+
+const deleteTeamInputSchema = z.object({
+  teamId: z.string().min(1, "Team is required."),
+});
+
+const removeTeamMemberInputSchema = z.object({
+  teamId: z.string().min(1, "Team is required."),
+  userId: z.string().min(1, "Member user id is required."),
+});
+
+const updateTeamMemberRoleInputSchema = z.object({
+  teamId: z.string().min(1, "Team is required."),
+  userId: z.string().min(1, "Member user id is required."),
+  role: z.nativeEnum(TeamRole),
+});
+
+export type TeamMemberSummary = {
+  userId: string;
+  email: string;
+  role: TeamRole;
+};
 
 export async function createTeamForCurrentUser(
   raw: unknown,
@@ -266,6 +306,161 @@ export async function addTeamMemberByEmailForCurrentUser(
   };
 }
 
+export async function updateTeamForCurrentUser(raw: unknown): Promise<TeamSummary> {
+  const userId = await requireUserId();
+  const parsed = updateTeamInputSchema.parse(raw);
+  await assertTeamPermission(parsed.teamId, userId, "team:update");
+
+  const team = await prisma.team.update({
+    where: { id: parsed.teamId },
+    data: { name: parsed.name },
+    include: {
+      memberships: {
+        select: {
+          userId: true,
+          role: true,
+        },
+      },
+    },
+  });
+
+  return toTeamSummary(team, userId);
+}
+
+export async function deleteTeamForCurrentUser(raw: unknown): Promise<{ teamId: string }> {
+  const userId = await requireUserId();
+  const parsed = deleteTeamInputSchema.parse(raw);
+  await assertTeamPermission(parsed.teamId, userId, "team:delete");
+
+  await prisma.team.delete({
+    where: { id: parsed.teamId },
+  });
+
+  return { teamId: parsed.teamId };
+}
+
+export async function listTeamMembersForCurrentUser(
+  teamId: string,
+): Promise<TeamMemberSummary[]> {
+  const userId = await requireUserId();
+  const parsedTeamId = z.string().min(1, "Team is required.").parse(teamId);
+  await assertTeamPermission(parsedTeamId, userId, "team:roster:read");
+
+  const members = await prisma.teamMembership.findMany({
+    where: { teamId: parsedTeamId },
+    select: {
+      userId: true,
+      role: true,
+      user: {
+        select: {
+          email: true,
+        },
+      },
+    },
+    orderBy: [{ role: "asc" }, { createdAt: "asc" }],
+  });
+
+  return members.map((member) => ({
+    userId: member.userId,
+    email: member.user.email,
+    role: member.role,
+  }));
+}
+
+export async function removeTeamMemberForCurrentUser(
+  raw: unknown,
+): Promise<{ teamId: string; userId: string }> {
+  const actorUserId = await requireUserId();
+  const parsed = removeTeamMemberInputSchema.parse(raw);
+  const actorMembership = await assertTeamPermission(
+    parsed.teamId,
+    actorUserId,
+    "team:members:write",
+  );
+
+  const targetMembership = await prisma.teamMembership.findUnique({
+    where: {
+      teamId_userId: {
+        teamId: parsed.teamId,
+        userId: parsed.userId,
+      },
+    },
+    select: { role: true },
+  });
+
+  if (!targetMembership) {
+    throw new TeamMemberNotFoundError();
+  }
+  if (targetMembership.role === TeamRole.OWNER) {
+    throw new TeamOwnerRoleInvariantError();
+  }
+  if (actorMembership.role !== TeamRole.OWNER && targetMembership.role === TeamRole.ADMIN) {
+    throw new TeamPermissionDeniedError();
+  }
+
+  await prisma.teamMembership.delete({
+    where: {
+      teamId_userId: {
+        teamId: parsed.teamId,
+        userId: parsed.userId,
+      },
+    },
+  });
+
+  return { teamId: parsed.teamId, userId: parsed.userId };
+}
+
+export async function updateTeamMemberRoleForCurrentUser(
+  raw: unknown,
+): Promise<{ teamId: string; userId: string; role: TeamRole }> {
+  const actorUserId = await requireUserId();
+  const parsed = updateTeamMemberRoleInputSchema.parse(raw);
+  const actorMembership = await assertTeamPermission(
+    parsed.teamId,
+    actorUserId,
+    "team:members:role:update",
+  );
+
+  if (parsed.role === TeamRole.OWNER) {
+    throw new TeamOwnerRoleInvariantError();
+  }
+
+  const targetMembership = await prisma.teamMembership.findUnique({
+    where: {
+      teamId_userId: {
+        teamId: parsed.teamId,
+        userId: parsed.userId,
+      },
+    },
+    select: { role: true },
+  });
+
+  if (!targetMembership) {
+    throw new TeamMemberNotFoundError();
+  }
+  if (targetMembership.role === TeamRole.OWNER || parsed.userId === actorUserId) {
+    throw new TeamOwnerRoleInvariantError();
+  }
+  if (actorMembership.role !== TeamRole.OWNER) {
+    throw new TeamPermissionDeniedError();
+  }
+
+  return prisma.teamMembership.update({
+    where: {
+      teamId_userId: {
+        teamId: parsed.teamId,
+        userId: parsed.userId,
+      },
+    },
+    data: { role: parsed.role },
+    select: {
+      teamId: true,
+      userId: true,
+      role: true,
+    },
+  });
+}
+
 async function requireUserId(): Promise<string> {
   const session = await auth();
   const user = session?.user as { id?: string; email?: string } | undefined;
@@ -290,7 +485,7 @@ async function assertTeamPermission(
   teamId: string,
   userId: string,
   permission: TeamPermission,
-): Promise<void> {
+): Promise<{ role: TeamRole }> {
   const membership = await prisma.teamMembership.findUnique({
     where: {
       teamId_userId: {
@@ -308,6 +503,8 @@ async function assertTeamPermission(
   if (!canTeamRole(membership.role, permission)) {
     throw new TeamPermissionDeniedError();
   }
+
+  return membership;
 }
 
 function toTeamSummary(team: TeamWithMemberships, currentUserId: string): TeamSummary {
