@@ -22,6 +22,12 @@ import {
   loadScheduleDraft,
   saveScheduleDraft,
 } from "@/lib/schedule/draft-storage";
+import {
+  clearMemberSnapshots,
+  memberSnapshotDepth,
+  popMemberSnapshot,
+  pushMemberSnapshot,
+} from "@/lib/schedule/member-snapshot-stack";
 import type { HolidayCountry, ScheduleResult } from "@/lib/schedule/types";
 import { scheduleInputSchema } from "@/lib/schedule/types";
 
@@ -66,8 +72,12 @@ export default function Home() {
   const [result, setResult] = useState<ScheduleResult | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [importSnapshotStack, setImportSnapshotStack] = useState<TeamMemberForm[][]>(() =>
+    clearMemberSnapshots<TeamMemberForm>(),
+  );
 
   const hydrateFromDraft = useCallback(() => {
+    setImportSnapshotStack(clearMemberSnapshots<TeamMemberForm>());
     const draft = loadScheduleDraft();
     if (!draft) {
       setHasHydratedDraft(true);
@@ -154,6 +164,7 @@ export default function Home() {
   const resetDraft = useCallback(() => {
     const defaults = defaultRange();
     clearScheduleDraft();
+    setImportSnapshotStack(clearMemberSnapshots<TeamMemberForm>());
     setStartDate(defaults.start);
     setEndDate(defaults.end);
     setHolidayCountry("US");
@@ -185,6 +196,7 @@ export default function Home() {
 
   const handleRosterImported = useCallback(
     (imported: TeamMemberForm[]) => {
+      setImportSnapshotStack((prev) => pushMemberSnapshot(prev, members));
       const padded = withMinimumMemberRows(imported);
       setMembers(padded);
       setResult(null);
@@ -198,8 +210,26 @@ export default function Home() {
         colorblindMode,
       });
     },
-    [colorblindMode, endDate, holidayCountry, startDate],
+    [colorblindMode, endDate, holidayCountry, members, startDate],
   );
+
+  const handleImportUndo = useCallback(() => {
+    setImportSnapshotStack((prevStack) => {
+      const { stack, restored } = popMemberSnapshot(prevStack);
+      if (restored !== null) {
+        setMembers(restored);
+        setResult(null);
+        saveScheduleDraft({
+          startDate,
+          endDate,
+          holidayCountry,
+          members: restored,
+          colorblindMode,
+        });
+      }
+      return stack;
+    });
+  }, [colorblindMode, endDate, holidayCountry, startDate]);
 
   return (
     <div className="bg-background min-h-full">
@@ -231,7 +261,11 @@ export default function Home() {
           />
         </div>
 
-        <TeamRosterLoadPanel onRosterImported={handleRosterImported} />
+        <TeamRosterLoadPanel
+          onRosterImported={handleRosterImported}
+          importUndoDepth={memberSnapshotDepth(importSnapshotStack)}
+          onImportUndo={handleImportUndo}
+        />
 
         <TeamSection
           members={members}

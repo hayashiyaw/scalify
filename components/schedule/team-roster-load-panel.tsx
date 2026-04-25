@@ -22,6 +22,10 @@ import type { TeamSummary } from "@/lib/team/service";
 export type TeamRosterLoadPanelProps = {
   /** Replaces calculator members and should clear schedule results in the parent. */
   onRosterImported: (members: TeamMemberForm[]) => void;
+  /** Number of import steps that can be undone; when 0 the Undo control is hidden. */
+  importUndoDepth: number;
+  /** Restores the previous member rows and clears schedule results in the parent. */
+  onImportUndo: () => void;
 };
 
 function sortTeamsByName(teams: TeamSummary[]): TeamSummary[] {
@@ -34,7 +38,11 @@ function sortTeamsByName(teams: TeamSummary[]): TeamSummary[] {
  * Home-page strip for loading a server roster into the calculator.
  * Signed-out: generic tease only (no team APIs). Signed-in: team list and roster import into the parent form.
  */
-export function TeamRosterLoadPanel({ onRosterImported }: TeamRosterLoadPanelProps) {
+export function TeamRosterLoadPanel({
+  onRosterImported,
+  importUndoDepth,
+  onImportUndo,
+}: TeamRosterLoadPanelProps) {
   const { data: session, status } = useSession();
   const sessionUserId = session?.user?.id;
   const [teams, setTeams] = useState<TeamSummary[]>([]);
@@ -206,7 +214,8 @@ export function TeamRosterLoadPanel({ onRosterImported }: TeamRosterLoadPanelPro
           latest saved roster for that team, or—if nothing was saved yet—with one row per teammate
           (display name, otherwise the part of their email before @). Use Load again on the same team
           to refresh from the server. If you still have fewer than two people, blank rows are added
-          so you can finish the list.
+          so you can finish the list. After a successful load, use Undo roster load to step back
+          through prior member lists (up to ten imports).
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -240,6 +249,17 @@ export function TeamRosterLoadPanel({ onRosterImported }: TeamRosterLoadPanelPro
             {rosterPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
             Load team roster
           </Button>
+          {importUndoDepth > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={rosterPending}
+              onClick={onImportUndo}
+              aria-label={`Undo roster load (${importUndoDepth} step${importUndoDepth === 1 ? "" : "s"} available)`}
+            >
+              Undo roster load
+            </Button>
+          ) : null}
         </div>
         {rosterLoadError ? (
           <Alert variant="destructive">
