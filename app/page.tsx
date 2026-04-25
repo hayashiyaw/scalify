@@ -11,7 +11,7 @@ import { ExportCsvButton } from "@/components/schedule/export-csv-button";
 import { HolidayCountrySection } from "@/components/schedule/holiday-country-section";
 import { ReportDashboard } from "@/components/schedule/report-dashboard";
 import { ScheduleCalendar } from "@/components/schedule/schedule-calendar";
-import { TeamRosterLoadTease } from "@/components/schedule/team-roster-load-tease";
+import { TeamRosterLoadPanel } from "@/components/schedule/team-roster-load-panel";
 import { TeamSection, type TeamMemberForm } from "@/components/schedule/team-section";
 import { ThemeSelector } from "@/components/theme-selector";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -204,7 +204,7 @@ export default function Home() {
           />
         </div>
 
-        <TeamRosterLoadTease />
+        <TeamRosterLoadPanel />
 
         <TeamSection
           members={members}
