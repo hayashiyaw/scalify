@@ -174,6 +174,11 @@ export default function Home() {
     );
   }, []);
 
+  const handleRosterImported = useCallback((imported: TeamMemberForm[]) => {
+    setMembers(imported);
+    setResult(null);
+  }, []);
+
   return (
     <div className="bg-background min-h-full">
       <div className="mx-auto flex max-w-5xl flex-col gap-8 px-4 py-10 md:px-6">
@@ -204,7 +209,7 @@ export default function Home() {
           />
         </div>
 
-        <TeamRosterLoadPanel />
+        <TeamRosterLoadPanel onRosterImported={handleRosterImported} />
 
         <TeamSection
           members={members}

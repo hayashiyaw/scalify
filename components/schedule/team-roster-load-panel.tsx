@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { useSession } from "next-auth/react";
 
-import { listTeamsAction } from "@/app/actions/team";
+import { listTeamsAction, loadTeamMembersAction } from "@/app/actions/team";
+import type { TeamMemberForm } from "@/components/schedule/team-section";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +19,11 @@ import {
 } from "@/components/ui/select";
 import type { TeamSummary } from "@/lib/team/service";
 
+export type TeamRosterLoadPanelProps = {
+  /** Replaces calculator members and should clear schedule results in the parent. */
+  onRosterImported: (members: TeamMemberForm[]) => void;
+};
+
 function sortTeamsByName(teams: TeamSummary[]): TeamSummary[] {
   return [...teams].sort((a, b) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
@@ -26,15 +32,18 @@ function sortTeamsByName(teams: TeamSummary[]): TeamSummary[] {
 
 /**
  * Home-page strip for loading a server roster into the calculator.
- * Signed-out: generic tease only (no team APIs). Signed-in: team list UI; roster replace is disabled until a follow-up issue.
+ * Signed-out: generic tease only (no team APIs). Signed-in: team list and roster import into the parent form.
  */
-export function TeamRosterLoadPanel() {
+export function TeamRosterLoadPanel({ onRosterImported }: TeamRosterLoadPanelProps) {
   const { data: session, status } = useSession();
   const sessionUserId = session?.user?.id;
   const [teams, setTeams] = useState<TeamSummary[]>([]);
   const [teamsError, setTeamsError] = useState<string | null>(null);
   const [teamsReady, setTeamsReady] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [rosterLoadError, setRosterLoadError] = useState<string | null>(null);
+  const [rosterPending, setRosterPending] = useState(false);
+  const rosterLoadLockRef = useRef(false);
 
   useEffect(() => {
     if (status !== "authenticated") {
@@ -83,7 +92,35 @@ export function TeamRosterLoadPanel() {
 
   const onTeamChange = useCallback((value: string) => {
     setSelectedTeamId(value);
+    setRosterLoadError(null);
   }, []);
+
+  const onLoadRoster = useCallback(() => {
+    if (!selectedTeamId || rosterLoadLockRef.current) return;
+
+    rosterLoadLockRef.current = true;
+    setRosterLoadError(null);
+    setRosterPending(true);
+    void (async () => {
+      try {
+        const response = await loadTeamMembersAction(selectedTeamId);
+        if (!response.ok) {
+          setRosterLoadError(response.error);
+          return;
+        }
+        onRosterImported(
+          response.data.members.map((m) => ({
+            id: m.id,
+            name: m.name,
+            unavailableDates: [...m.unavailableDates],
+          })),
+        );
+      } finally {
+        rosterLoadLockRef.current = false;
+        setRosterPending(false);
+      }
+    })();
+  }, [onRosterImported, selectedTeamId]);
 
   if (status === "loading") {
     return null;
@@ -165,26 +202,48 @@ export function TeamRosterLoadPanel() {
       <CardHeader>
         <CardTitle>Load a saved roster</CardTitle>
         <CardDescription>
-          Teams you belong to, sorted A–Z. Loading saved members from the server into this form is
-          not available in this release yet—the action below stays disabled until then.
+          Teams you belong to, sorted A–Z. Load replaces everyone in the member list below with the
+          latest roster saved for that team (use again on the same team to refresh from the server).
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-        <Select value={selectedTeamId ?? ""} items={teamSelectItems} onValueChange={onTeamChange}>
-          <SelectTrigger className="w-full min-w-0 sm:w-80" size="sm" aria-label="Team for roster load">
-            <SelectValue placeholder="Select a team" />
-          </SelectTrigger>
-          <SelectContent align="start" alignItemWithTrigger={false} className="max-h-72">
-            {teams.map((team) => (
-              <SelectItem key={team.id} value={team.id} label={team.name}>
-                {team.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button type="button" disabled title="Roster import is not enabled in this release yet.">
-          Load team roster
-        </Button>
+      <CardContent className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <Select
+            value={selectedTeamId ?? ""}
+            items={teamSelectItems}
+            onValueChange={onTeamChange}
+            disabled={rosterPending}
+          >
+            <SelectTrigger
+              className="w-full min-w-0 sm:w-80"
+              size="sm"
+              aria-label="Team for roster load"
+            >
+              <SelectValue placeholder="Select a team" />
+            </SelectTrigger>
+            <SelectContent align="start" alignItemWithTrigger={false} className="max-h-72">
+              {teams.map((team) => (
+                <SelectItem key={team.id} value={team.id} label={team.name}>
+                  {team.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            disabled={!selectedTeamId || rosterPending}
+            onClick={onLoadRoster}
+          >
+            {rosterPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+            Load team roster
+          </Button>
+        </div>
+        {rosterLoadError ? (
+          <Alert variant="destructive">
+            <AlertTitle>Could not load roster</AlertTitle>
+            <AlertDescription>{rosterLoadError}</AlertDescription>
+          </Alert>
+        ) : null}
       </CardContent>
     </Card>
   );
