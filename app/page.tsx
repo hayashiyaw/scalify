@@ -5,7 +5,6 @@ import { Loader2 } from "lucide-react";
 import Link from "next/link";
 
 import { calculateSchedule } from "@/app/actions/schedule";
-import { AccountCard } from "@/components/auth/account-card";
 import { DateRangeSection } from "@/components/schedule/date-range-section";
 import { ExportCsvButton } from "@/components/schedule/export-csv-button";
 import { HolidayCountrySection } from "@/components/schedule/holiday-country-section";
@@ -13,7 +12,6 @@ import { ReportDashboard } from "@/components/schedule/report-dashboard";
 import { ScheduleCalendar } from "@/components/schedule/schedule-calendar";
 import { TeamRosterLoadPanel } from "@/components/schedule/team-roster-load-panel";
 import { TeamSection, type TeamMemberForm } from "@/components/schedule/team-section";
-import { ThemeSelector } from "@/components/theme-selector";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { addDays, formatISODateOnly } from "@/lib/schedule/dates";
@@ -234,19 +232,12 @@ export default function Home() {
   return (
     <div className="bg-background min-h-full">
       <div className="mx-auto flex max-w-5xl flex-col gap-8 px-4 py-10 md:px-6">
-        <header className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-1">
-            <h1 className="font-heading text-3xl font-semibold tracking-tight">
-              Scalify
-            </h1>
-            <p className="text-muted-foreground text-sm md:text-base">
-              Balance weekday and weekend or holiday shifts across your team.
-            </p>
-          </div>
-          <ThemeSelector />
+        <header className="space-y-1">
+          <h1 className="font-heading text-3xl font-semibold tracking-tight">Scheduler</h1>
+          <p className="text-muted-foreground text-sm md:text-base">
+            Balance weekday and weekend or holiday shifts across your team.
+          </p>
         </header>
-
-        <AccountCard />
 
         <div className="grid gap-6 lg:grid-cols-2">
           <DateRangeSection
