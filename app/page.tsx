@@ -39,6 +39,15 @@ function newMember(): TeamMemberForm {
   return { id: crypto.randomUUID(), name: "", unavailableDates: [] };
 }
 
+/** Team UI expects at least two rows (add/remove rules, calculate gate). Pad after server import when roster is empty or solo. */
+function withMinimumMemberRows(imported: TeamMemberForm[], minimum = 2): TeamMemberForm[] {
+  const next = [...imported];
+  while (next.length < minimum) {
+    next.push(newMember());
+  }
+  return next;
+}
+
 /** Stable ids for the first two rows so SSR and the client match (avoids hydration errors from random UUIDs in useState). */
 const initialMembers = (): TeamMemberForm[] => [
   { id: "member-initial-0", name: "", unavailableDates: [] },
@@ -175,7 +184,7 @@ export default function Home() {
   }, []);
 
   const handleRosterImported = useCallback((imported: TeamMemberForm[]) => {
-    setMembers(imported);
+    setMembers(withMinimumMemberRows(imported));
     setResult(null);
   }, []);
 

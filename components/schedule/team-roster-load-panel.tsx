@@ -204,6 +204,8 @@ export function TeamRosterLoadPanel({ onRosterImported }: TeamRosterLoadPanelPro
         <CardDescription>
           Teams you belong to, sorted A–Z. Load replaces everyone in the member list below with the
           latest roster saved for that team (use again on the same team to refresh from the server).
+          If the saved roster has no one or only one person, blank rows are added so the form stays
+          usable until you have at least two names.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
