@@ -12,8 +12,8 @@ import { cn } from "@/lib/utils";
 
 const primaryNav = [
   { href: "/", label: "Scheduler", match: "exact" as const },
-  { href: "/teams", label: "Team management", match: "prefix" as const },
-  { href: "/account", label: "User data management", match: "prefix" as const },
+  { href: "/teams", label: "Squad", match: "prefix" as const },
+  { href: "/account", label: "Profile", match: "prefix" as const },
 ];
 
 function routeActive(pathname: string, href: string, match: "exact" | "prefix") {
@@ -92,7 +92,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const authed = status === "authenticated" && Boolean(session?.user);
 
   return (
-    <div className="bg-background flex min-h-full flex-col">
+    <div className="bg-background flex min-h-screen flex-col">
       <header className="border-border bg-background/95 supports-[backdrop-filter]:bg-background/80 sticky top-0 z-40 border-b backdrop-blur">
         <div className="flex h-14 items-center gap-3 px-4 md:px-6">
           {authed ? (
@@ -141,9 +141,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 md:min-h-[calc(100vh-3.5rem)]">
         {authed ? (
-          <aside className="border-border bg-background hidden w-56 shrink-0 flex-col border-r md:flex">
+          <aside className="border-border bg-background hidden w-56 shrink-0 self-start border-r md:sticky md:top-14 md:flex md:h-[calc(100vh-3.5rem)] md:flex-col md:overflow-y-auto">
             <PrimaryNavLinks className="p-3" />
           </aside>
         ) : null}

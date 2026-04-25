@@ -309,8 +309,8 @@ function AccountSettingsForms({
         <CardHeader>
           <CardTitle className="text-lg text-destructive">Delete account</CardTitle>
           <CardDescription>
-            This permanently deletes your account. Teams you own are removed. Memberships in teams
-            owned by others are dropped. Scheduling on the home page without an account is
+            This permanently deletes your account. Squads you own are removed. Memberships in
+            squads owned by others are dropped. Scheduling on the home page without an account is
             unchanged.
           </CardDescription>
         </CardHeader>
@@ -392,10 +392,10 @@ export default function AccountPage() {
     <div className="bg-background min-h-full">
       <div className="mx-auto flex max-w-2xl flex-col gap-8 px-4 py-10 md:px-6">
         <header className="space-y-1">
-          <h1 className="font-heading text-3xl font-semibold tracking-tight">User data management</h1>
+          <h1 className="font-heading text-3xl font-semibold tracking-tight">Profile</h1>
           <p className="text-muted-foreground text-sm md:text-base">
-            Update your profile, sign-in email, and password. Delete your account removes teams you
-            own and leaves other teams.
+            Update your profile, sign-in email, and password. Delete your account removes squads
+            you own and leaves other squads.
           </p>
         </header>
 

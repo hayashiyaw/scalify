@@ -235,7 +235,7 @@ export default function Home() {
         <header className="space-y-1">
           <h1 className="font-heading text-3xl font-semibold tracking-tight">Scheduler</h1>
           <p className="text-muted-foreground text-sm md:text-base">
-            Balance weekday and weekend or holiday shifts across your team.
+            Balance weekday and weekend or holiday shifts across your squad.
           </p>
         </header>
 
@@ -266,9 +266,9 @@ export default function Home() {
           onUnavailableChange={updateUnavailable}
         />
         <div className="text-muted-foreground text-sm">
-          Team management moved to{" "}
+          Squad management moved to{" "}
           <Link href="/teams" className="text-primary underline-offset-4 hover:underline">
-            Team workspace
+            Squad workspace
           </Link>
           . Use that page to save and load shared availability.
         </div>

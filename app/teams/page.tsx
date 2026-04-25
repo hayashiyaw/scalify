@@ -173,11 +173,11 @@ export default function TeamsPage() {
 
   const saveCurrentDraft = useCallback(() => {
     if (!selectedTeamId) {
-      setTeamError("Select a team before saving.");
+      setTeamError("Select a squad before saving.");
       return;
     }
     if (!canSaveFromDraft) {
-      setTeamError("Your role can view roster data but cannot save changes for this team.");
+      setTeamError("Your role can view roster data but cannot save changes for this squad.");
       return;
     }
 
@@ -196,19 +196,19 @@ export default function TeamsPage() {
       if (!response.ok) {
         setTeamError(
           response.code === "forbidden"
-            ? "Your role can view roster data but cannot save changes for this team."
+            ? "Your role can view roster data but cannot save changes for this squad."
             : response.error,
         );
         return;
       }
 
-      setTeamNotice("Saved current scheduler members and availability to this team.");
+      setTeamNotice("Saved current scheduler members and availability to this squad.");
     });
   }, [canSaveFromDraft, selectedTeamId]);
 
   const loadToSchedulerDraft = useCallback(() => {
     if (!selectedTeamId) {
-      setTeamError("Select a team before loading.");
+      setTeamError("Select a squad before loading.");
       return;
     }
 
@@ -231,17 +231,17 @@ export default function TeamsPage() {
         return;
       }
 
-      setTeamNotice("This team has no saved availability yet.");
+      setTeamNotice("This squad has no saved availability yet.");
     });
   }, [selectedTeamId]);
 
   const addMemberByEmail = useCallback(() => {
     if (!selectedTeamId) {
-      setTeamError("Select a team before adding a member.");
+      setTeamError("Select a squad before adding a member.");
       return;
     }
     if (!canSaveFromDraft) {
-      setTeamError("Your role does not allow adding members to this team.");
+      setTeamError("Your role does not allow adding members to this squad.");
       return;
     }
 
@@ -259,7 +259,7 @@ export default function TeamsPage() {
           return;
         }
         if (response.code === "already_member") {
-          setTeamError("That account is already a member of this team.");
+          setTeamError("That account is already a member of this squad.");
           return;
         }
         setTeamError(response.error);
@@ -275,7 +275,7 @@ export default function TeamsPage() {
   const createTeam = useCallback(() => {
     const name = newTeamName.trim();
     if (name.length === 0) {
-      setTeamError("Enter a team name before creating.");
+      setTeamError("Enter a squad name before creating.");
       return;
     }
 
@@ -288,7 +288,7 @@ export default function TeamsPage() {
         return;
       }
       setNewTeamName("");
-      setTeamNotice(`Created team ${response.data.name}.`);
+      setTeamNotice(`Created squad ${response.data.name}.`);
       await refreshTeamsAndSelection();
       setSelectedTeamId(response.data.id);
     });
@@ -296,13 +296,13 @@ export default function TeamsPage() {
 
   const renameSelectedTeam = useCallback(() => {
     if (!selectedTeamId) {
-      setTeamError("Select a team before renaming.");
+      setTeamError("Select a squad before renaming.");
       return;
     }
 
     const name = renameTeamName.trim();
     if (name.length === 0) {
-      setTeamError("Team name is required.");
+      setTeamError("Squad name is required.");
       return;
     }
 
@@ -314,17 +314,17 @@ export default function TeamsPage() {
         setTeamError(response.error);
         return;
       }
-      setTeamNotice(`Renamed team to ${response.data.name}.`);
+      setTeamNotice(`Renamed squad to ${response.data.name}.`);
       await refreshTeamsAndSelection();
     });
   }, [refreshTeamsAndSelection, renameTeamName, selectedTeamId]);
 
   const deleteSelectedTeam = useCallback(() => {
     if (!selectedTeamId || !selectedTeam) {
-      setTeamError("Select a team before deleting.");
+      setTeamError("Select a squad before deleting.");
       return;
     }
-    if (!window.confirm(`Delete team "${selectedTeam.name}"? This cannot be undone.`)) {
+    if (!window.confirm(`Delete squad "${selectedTeam.name}"? This cannot be undone.`)) {
       return;
     }
 
@@ -336,7 +336,7 @@ export default function TeamsPage() {
         setTeamError(response.error);
         return;
       }
-      setTeamNotice("Deleted team.");
+      setTeamNotice("Deleted squad.");
       await refreshTeamsAndSelection();
     });
   }, [refreshTeamsAndSelection, selectedTeam, selectedTeamId]);
@@ -387,22 +387,22 @@ export default function TeamsPage() {
     <div className="bg-background min-h-full">
       <div className="mx-auto flex max-w-5xl flex-col gap-8 px-4 py-10 md:px-6">
         <header className="space-y-1">
-          <h1 className="font-heading text-3xl font-semibold tracking-tight">Team management</h1>
+          <h1 className="font-heading text-3xl font-semibold tracking-tight">Squad</h1>
           <p className="text-muted-foreground text-sm md:text-base">
-            Manage shared team members and blocked dates outside the schedule page.
+            Manage shared squad members and blocked dates outside the scheduler page.
           </p>
         </header>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Team list and management</CardTitle>
+            <CardTitle className="text-lg">Squad list and management</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {sessionStatus !== "authenticated" ? (
               <Alert>
                 <AlertTitle>Login required</AlertTitle>
                 <AlertDescription>
-                  Team management is only available for authenticated users.
+                  Squad management is only available for authenticated users.
                 </AlertDescription>
               </Alert>
             ) : (
@@ -411,7 +411,7 @@ export default function TeamsPage() {
                   <Input
                     value={newTeamName}
                     onChange={(event) => setNewTeamName(event.target.value)}
-                    placeholder="New team name"
+                    placeholder="New squad name"
                     disabled={pending}
                     className="sm:w-80"
                   />
@@ -421,7 +421,7 @@ export default function TeamsPage() {
                     disabled={pending || newTeamName.trim().length === 0}
                   >
                     {pending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-                    Create team
+                    Create squad
                   </Button>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -436,7 +436,7 @@ export default function TeamsPage() {
                     disabled={teams.length === 0}
                   >
                     <SelectTrigger className="w-full min-w-0 sm:w-80">
-                      <SelectValue placeholder="Select a team" />
+                      <SelectValue placeholder="Select a squad" />
                     </SelectTrigger>
                     <SelectContent align="start" alignItemWithTrigger={false} className="max-h-72">
                       {teams.map((team) => (
@@ -470,7 +470,7 @@ export default function TeamsPage() {
                   <p className="text-muted-foreground text-sm">{rosterPermissionHint}</p>
                 ) : null}
                 {teams.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">You are not in any teams yet.</p>
+                  <p className="text-muted-foreground text-sm">You are not in any squads yet.</p>
                 ) : null}
                 {teams.length > 0 ? (
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -501,7 +501,7 @@ export default function TeamsPage() {
                 {selectedTeam ? (
                   <div className="space-y-3 rounded-md border p-3">
                     <p className="text-muted-foreground text-sm">
-                      Team details: role <strong>{selectedTeam.currentUserRole}</strong>, members{" "}
+                      Squad details: role <strong>{selectedTeam.currentUserRole}</strong>, members{" "}
                       <strong>{selectedTeam.memberCount}</strong>.
                     </p>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -521,7 +521,7 @@ export default function TeamsPage() {
                           renameTeamName.trim().length === 0
                         }
                       >
-                        Rename team
+                        Rename squad
                       </Button>
                       <Button
                         type="button"
@@ -529,7 +529,7 @@ export default function TeamsPage() {
                         onClick={deleteSelectedTeam}
                         disabled={pending || !canDeleteTeam}
                       >
-                        Delete team
+                        Delete squad
                       </Button>
                     </div>
                   </div>
@@ -604,13 +604,13 @@ export default function TeamsPage() {
             )}
             {teamError ? (
               <Alert variant="destructive">
-                <AlertTitle>Team sync failed</AlertTitle>
+                <AlertTitle>Squad sync failed</AlertTitle>
                 <AlertDescription>{teamError}</AlertDescription>
               </Alert>
             ) : null}
             {teamNotice ? (
               <Alert>
-                <AlertTitle>Team sync</AlertTitle>
+                <AlertTitle>Squad sync</AlertTitle>
                 <AlertDescription>{teamNotice}</AlertDescription>
               </Alert>
             ) : null}

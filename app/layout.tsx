@@ -20,9 +20,9 @@ const roboto = Roboto({
 });
 
 export const metadata: Metadata = {
-  title: "Scalify — team shift scheduler",
+  title: "Scalify — squad shift scheduler",
   description:
-    "Balance weekday and weekend or holiday shifts across your team.",
+    "Balance weekday and weekend or holiday shifts across your squad.",
 };
 
 export default function RootLayout({
