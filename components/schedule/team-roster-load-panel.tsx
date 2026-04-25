@@ -166,7 +166,7 @@ export function TeamRosterLoadPanel({
           <CardTitle>Load a saved roster</CardTitle>
           <CardDescription className="flex items-center gap-2">
             <Loader2 className="size-4 shrink-0 animate-spin" />
-            Loading your teams…
+            Loading your squads…
           </CardDescription>
         </CardHeader>
       </Card>
@@ -181,7 +181,7 @@ export function TeamRosterLoadPanel({
         </CardHeader>
         <CardContent>
           <Alert variant="destructive">
-            <AlertTitle>Could not load teams</AlertTitle>
+            <AlertTitle>Could not load squads</AlertTitle>
             <AlertDescription>{teamsError}</AlertDescription>
           </Alert>
         </CardContent>
@@ -195,13 +195,13 @@ export function TeamRosterLoadPanel({
         <CardHeader>
           <CardTitle>Load a saved roster</CardTitle>
           <CardDescription>
-            You are not in any teams yet. Create or join a team in the team workspace, then come
+            You are not in any squads yet. Create or join a squad in the squad workspace, then come
             back here to pick which roster to load into the calculator.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Link href="/teams" className={buttonVariants({ variant: "secondary" })}>
-            Open team workspace
+            Open squad workspace
           </Link>
         </CardContent>
       </Card>
@@ -213,9 +213,9 @@ export function TeamRosterLoadPanel({
       <CardHeader>
         <CardTitle>Load a saved roster</CardTitle>
         <CardDescription>
-          Teams you belong to, sorted A–Z. Load replaces everyone in the member list below with the
-          latest saved roster for that team, or—if nothing was saved yet—with one row per teammate
-          (display name, otherwise the part of their email before @). Use Load again on the same team
+          Squads you belong to, sorted A–Z. Load replaces everyone in the member list below with the
+          latest saved roster for that squad, or—if nothing was saved yet—with one row per squadmate
+          (display name, otherwise the part of their email before @). Use Load again on the same squad
           to refresh from the server. If you still have fewer than two people, blank rows are added
           so you can finish the list. After a successful load, use Undo roster load to step back
           through prior member lists (up to ten imports).
@@ -232,9 +232,9 @@ export function TeamRosterLoadPanel({
             <SelectTrigger
               className="w-full min-w-0 sm:w-80"
               size="sm"
-              aria-label="Team for roster load"
+              aria-label="Squad for roster load"
             >
-              <SelectValue placeholder="Select a team" />
+              <SelectValue placeholder="Select a squad" />
             </SelectTrigger>
             <SelectContent align="start" alignItemWithTrigger={false} className="max-h-72">
               {teams.map((team) => (
@@ -250,7 +250,7 @@ export function TeamRosterLoadPanel({
             onClick={onLoadRoster}
           >
             {rosterPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-            Load team roster
+            Load squad roster
           </Button>
           {importUndoDepth > 0 ? (
             <Button
