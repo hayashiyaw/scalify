@@ -42,6 +42,22 @@ npm run prisma:generate
 
 Open [http://localhost:3000](http://localhost:3000). Edit the main screen in `app/page.tsx`; schedule calculation runs through the server action in `app/actions/schedule.ts`.
 
+### Object storage / MinIO (SCA0020)
+
+Avatar uploads use an **S3-compatible API** (AWS S3, Cloudflare R2, MinIO, etc.). For local development:
+
+1. Start MinIO: `docker compose up -d` (API [http://localhost:9000](http://localhost:9000), console [http://localhost:9001](http://localhost:9001)).
+2. Default dev credentials are **`minioadmin` / `minioadmin`** (local only; never use these outside your machine).
+3. In the MinIO console, create a **bucket** whose name matches `S3_BUCKET` in `.env` (for example `scalify`).
+4. Copy the S3-related variables from `.env.example` into `.env` and adjust if your ports differ.
+5. Attach a **bucket policy** so objects under `avatars/*` are **publicly readable** (GetObject) while **anonymous Put** stays disabled; uploads will use **presigned PUT** URLs from the app. Keep **ListBucket** private. Policy shape depends on your provider; see the comment block in `lib/storage/index.ts`.
+
+Application helpers (public URL composition, presigned PUT, delete by key) live under `lib/storage/`. **Vitest** covers URL/key helpers and validation constants without a running MinIO.
+
+**Manual smoke (presigned PUT):** with MinIO running and env set, mint a presigned URL through the storage module (or the future `/account` API), then upload with curl using the same `Content-Type` and `Content-Length` as were used to sign the request, for example:
+
+`curl -X PUT -H "Content-Type: image/png" --data-binary "@avatar.png" "<presigned-url>"`
+
 ### Scripts
 
 | Command        | Description              |
@@ -58,6 +74,7 @@ Open [http://localhost:3000](http://localhost:3000). Edit the main screen in `ap
 | `app/page.tsx` | Main UI: range, holidays, team, calculate, results |
 | `app/actions/schedule.ts` | Server action: validates input, runs `assignShifts` |
 | `lib/schedule/` | Types/schemas, assignment (`assign.ts`), dates, holidays, CSV, shuffle order |
+| `lib/storage/` | S3-compatible storage (presigned PUT, public URLs, delete) for `avatars/` |
 | `components/schedule/` | Calendar, report, team/date/holiday sections, CSV button |
 | `components/ui/` | Shared UI primitives |
 | `components/theme-*.tsx` | Theme provider and selector |
