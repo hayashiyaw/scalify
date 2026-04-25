@@ -5,7 +5,11 @@ import {
   AvatarValidationError,
   normalizeAvatarContentType,
 } from "@/lib/storage/avatar-validation";
-import { isWellFormedAvatarObjectKey, makeAvatarObjectKey } from "@/lib/storage/avatar-key";
+import {
+  avatarObjectKeyBelongsToUser,
+  isWellFormedAvatarObjectKey,
+  makeAvatarObjectKey,
+} from "@/lib/storage/avatar-key";
 import { MAX_AVATAR_BYTES } from "@/lib/storage/constants";
 import {
   composePublicObjectUrl,
@@ -72,6 +76,19 @@ describe("isWellFormedAvatarObjectKey", () => {
     expect(isWellFormedAvatarObjectKey("other/avatars/x")).toBe(false);
     expect(isWellFormedAvatarObjectKey("avatars/../x")).toBe(false);
     expect(isWellFormedAvatarObjectKey("avatars/onlyone")).toBe(false);
+  });
+});
+
+describe("avatarObjectKeyBelongsToUser", () => {
+  it("accepts keys minted for the same user id", () => {
+    const userId = "clabcdefghijklmn";
+    const key = makeAvatarObjectKey(userId);
+    expect(avatarObjectKeyBelongsToUser(key, userId)).toBe(true);
+  });
+
+  it("rejects keys that target a different user", () => {
+    const key = "avatars/cluserone1234/fileid";
+    expect(avatarObjectKeyBelongsToUser(key, "clusertwo5678")).toBe(false);
   });
 });
 

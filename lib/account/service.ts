@@ -3,6 +3,12 @@ import { z } from "zod";
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
+import {
+  avatarObjectKeyBelongsToUser,
+  createS3ObjectStorageFromProcess,
+  isWellFormedAvatarObjectKey,
+  objectKeyFromPublicUrl,
+} from "@/lib/storage";
 
 const nameSchema = z
   .string()
@@ -35,6 +41,22 @@ const changePasswordSchema = z.object({
 const deleteAccountSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required."),
   confirmEmail: z.string().trim().min(1, "Type your account email to confirm."),
+});
+
+const presignAvatarSchema = z.object({
+  contentType: z.string().trim().min(1, "Avatar content type is required."),
+  contentLength: z
+    .number()
+    .finite("Avatar size must be a number.")
+    .positive("Avatar size must be positive."),
+});
+
+const finalizeAvatarSchema = z.object({
+  objectKey: z
+    .string()
+    .trim()
+    .min(1, "Avatar object key is required.")
+    .refine((v) => isWellFormedAvatarObjectKey(v), "Avatar object key is invalid."),
 });
 
 export class UnauthorizedAccountError extends Error {
@@ -72,6 +94,13 @@ export class AccountEmailConfirmMismatchError extends Error {
   }
 }
 
+export class AccountStorageUnavailableError extends Error {
+  constructor() {
+    super("Avatar uploads are not configured right now.");
+    this.name = "AccountStorageUnavailableError";
+  }
+}
+
 async function requireUserId(): Promise<string> {
   const session = await auth();
   const id = session?.user?.id;
@@ -102,6 +131,41 @@ export type AccountSessionPatch = {
   image: string | null;
 };
 
+function toAccountSessionPatch(input: {
+  name: string | null;
+  email: string;
+  emailVerified: Date | null;
+  image: string | null;
+}): AccountSessionPatch {
+  return {
+    name: input.name,
+    email: input.email,
+    emailVerified: input.emailVerified,
+    image: input.image,
+  };
+}
+
+function tryCreateStorage() {
+  try {
+    return createS3ObjectStorageFromProcess();
+  } catch {
+    return null;
+  }
+}
+
+async function bestEffortDeleteAvatarByPublicUrl(imageUrl: string | null): Promise<void> {
+  if (!imageUrl) return;
+  const storage = tryCreateStorage();
+  if (!storage) return;
+  const objectKey = objectKeyFromPublicUrl(process.env.S3_PUBLIC_URL_BASE ?? "", imageUrl);
+  if (!objectKey || !isWellFormedAvatarObjectKey(objectKey)) return;
+  try {
+    await storage.deleteObject(objectKey);
+  } catch {
+    // Best-effort cleanup should not block account flows.
+  }
+}
+
 export async function updateProfileForCurrentUser(
   raw: unknown,
 ): Promise<AccountSessionPatch> {
@@ -118,10 +182,7 @@ export async function updateProfileForCurrentUser(
   });
 
   return {
-    name: updated.name,
-    email: updated.email,
-    emailVerified: updated.emailVerified,
-    image: updated.image,
+    ...toAccountSessionPatch(updated),
   };
 }
 
@@ -148,10 +209,7 @@ export async function updateEmailForCurrentUser(
 
   if (current.email.toLowerCase() === normalized) {
     return {
-      name: current.name,
-      email: current.email,
-      emailVerified: current.emailVerified,
-      image: current.image,
+      ...toAccountSessionPatch(current),
     };
   }
 
@@ -173,11 +231,66 @@ export async function updateEmailForCurrentUser(
   });
 
   return {
-    name: updated.name,
-    email: updated.email,
-    emailVerified: updated.emailVerified,
-    image: updated.image,
+    ...toAccountSessionPatch(updated),
   };
+}
+
+export async function presignAvatarUploadForCurrentUser(raw: unknown): Promise<{
+  uploadUrl: string;
+  objectKey: string;
+  expiresInSeconds: number;
+}> {
+  const userId = await requireUserId();
+  const parsed = presignAvatarSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw parsed.error;
+  }
+  const storage = tryCreateStorage();
+  if (!storage) {
+    throw new AccountStorageUnavailableError();
+  }
+  return storage.presignPutAvatar({
+    userId,
+    contentType: parsed.data.contentType,
+    contentLength: parsed.data.contentLength,
+  });
+}
+
+export async function finalizeAvatarUploadForCurrentUser(
+  raw: unknown,
+): Promise<AccountSessionPatch> {
+  const userId = await requireUserId();
+  const parsed = finalizeAvatarSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw parsed.error;
+  }
+  if (!avatarObjectKeyBelongsToUser(parsed.data.objectKey, userId)) {
+    throw new UnauthorizedAccountError();
+  }
+  const storage = tryCreateStorage();
+  if (!storage) {
+    throw new AccountStorageUnavailableError();
+  }
+  const newImageUrl = storage.getPublicUrlForKey(parsed.data.objectKey);
+  const current = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, email: true, emailVerified: true, image: true },
+  });
+  if (!current) {
+    throw new UnauthorizedAccountError();
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: { image: newImageUrl },
+    select: { name: true, email: true, emailVerified: true, image: true },
+  });
+
+  if (current.image && current.image !== newImageUrl) {
+    await bestEffortDeleteAvatarByPublicUrl(current.image);
+  }
+
+  return toAccountSessionPatch(updated);
 }
 
 export async function changePasswordForCurrentUser(raw: unknown): Promise<void> {
@@ -205,7 +318,7 @@ export async function deleteAccountForCurrentUser(raw: unknown): Promise<void> {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { email: true },
+    select: { email: true, image: true },
   });
   if (!user) {
     throw new UnauthorizedAccountError();
@@ -218,5 +331,6 @@ export async function deleteAccountForCurrentUser(raw: unknown): Promise<void> {
     throw new AccountEmailConfirmMismatchError();
   }
 
+  await bestEffortDeleteAvatarByPublicUrl(user.image);
   await prisma.user.delete({ where: { id: userId } });
 }
