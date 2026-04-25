@@ -1,14 +1,21 @@
 import { z } from "zod";
 
-import { holidayCountrySchema, scheduleMemberSchema } from "./types";
+import { holidayCountrySchema } from "./types";
 
 const DRAFT_STORAGE_KEY = "scalify:schedule-draft:v1";
+
+/** Draft members allow empty names (WIP rows); calculate still uses `scheduleInputSchema` on the server. */
+const draftMemberSchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  unavailableDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)),
+});
 
 const scheduleDraftSchema = z.object({
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   holidayCountry: holidayCountrySchema,
-  members: z.array(scheduleMemberSchema),
+  members: z.array(draftMemberSchema),
   colorblindMode: z.boolean().default(false),
 });
 

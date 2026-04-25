@@ -39,6 +39,15 @@ function newMember(): TeamMemberForm {
   return { id: crypto.randomUUID(), name: "", unavailableDates: [] };
 }
 
+/** Team UI expects at least two rows (add/remove rules, calculate gate). Pad after server import when roster is empty or solo. */
+function withMinimumMemberRows(imported: TeamMemberForm[], minimum = 2): TeamMemberForm[] {
+  const next = [...imported];
+  while (next.length < minimum) {
+    next.push(newMember());
+  }
+  return next;
+}
+
 /** Stable ids for the first two rows so SSR and the client match (avoids hydration errors from random UUIDs in useState). */
 const initialMembers = (): TeamMemberForm[] => [
   { id: "member-initial-0", name: "", unavailableDates: [] },
@@ -174,6 +183,24 @@ export default function Home() {
     );
   }, []);
 
+  const handleRosterImported = useCallback(
+    (imported: TeamMemberForm[]) => {
+      const padded = withMinimumMemberRows(imported);
+      setMembers(padded);
+      setResult(null);
+      // Persist immediately so focus/pageshow draft sync cannot overwrite with stale localStorage
+      // before the autosave effect runs (avoids blank names right after import).
+      saveScheduleDraft({
+        startDate,
+        endDate,
+        holidayCountry,
+        members: padded,
+        colorblindMode,
+      });
+    },
+    [colorblindMode, endDate, holidayCountry, startDate],
+  );
+
   return (
     <div className="bg-background min-h-full">
       <div className="mx-auto flex max-w-5xl flex-col gap-8 px-4 py-10 md:px-6">
@@ -204,7 +231,7 @@ export default function Home() {
           />
         </div>
 
-        <TeamRosterLoadPanel />
+        <TeamRosterLoadPanel onRosterImported={handleRosterImported} />
 
         <TeamSection
           members={members}
