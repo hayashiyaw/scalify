@@ -98,7 +98,10 @@ export function TeamRosterLoadPanel({
     [teams],
   );
 
-  const onTeamChange = useCallback((value: string) => {
+  const onTeamChange = useCallback((value: string | null) => {
+    if (value == null) {
+      return;
+    }
     setSelectedTeamId(value);
     setRosterLoadError(null);
   }, []);
