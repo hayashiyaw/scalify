@@ -248,15 +248,36 @@ describe("team service integration behaviors", () => {
     expect(result.members).toHaveLength(2);
   });
 
-  it("returns empty members when a team has no saved roster yet", async () => {
+  it("returns membership-backed roster rows when no saved roster JSON exists yet", async () => {
     authMock.mockResolvedValue({
       user: { id: "user_1" },
     });
     prismaMock.teamMembership.findUnique.mockResolvedValue({ role: "OWNER" });
     prismaMock.teamRoster.findUnique.mockResolvedValue(null);
+    prismaMock.teamMembership.findMany.mockResolvedValue([
+      {
+        userId: "user_1",
+        user: { name: "Alice Owner", email: "alice@example.com" },
+      },
+      {
+        userId: "user_2",
+        user: { name: null, email: "bob@example.com" },
+      },
+    ]);
 
     const result = await loadTeamMembersForCurrentUser("team_1");
-    expect(result.members).toEqual([]);
+    expect(result.members).toEqual([
+      {
+        id: "user_1",
+        name: "Alice Owner",
+        unavailableDates: [],
+      },
+      {
+        id: "user_2",
+        name: "bob",
+        unavailableDates: [],
+      },
+    ]);
   });
 
   it("denies roster access for non-members", async () => {

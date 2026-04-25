@@ -233,6 +233,18 @@ export async function saveTeamMembersForCurrentUser(
   };
 }
 
+function scheduleMemberNameFromUser(user: {
+  name: string | null;
+  email: string;
+}): string {
+  const trimmedName = user.name?.trim();
+  if (trimmedName) return trimmedName;
+  const email = user.email.trim();
+  const at = email.indexOf("@");
+  const local = at > 0 ? email.slice(0, at) : email;
+  return local.length > 0 ? local : "Member";
+}
+
 export async function loadTeamMembersForCurrentUser(
   teamId: string,
 ): Promise<{ teamId: string; members: ScheduleMember[] }> {
@@ -246,7 +258,25 @@ export async function loadTeamMembersForCurrentUser(
     select: { members: true },
   });
 
-  const members = z.array(scheduleMemberSchema).parse(roster?.members ?? []);
+  let members = z.array(scheduleMemberSchema).parse(roster?.members ?? []);
+
+  if (members.length === 0) {
+    const memberships = await prisma.teamMembership.findMany({
+      where: { teamId: parsedTeamId },
+      select: {
+        userId: true,
+        user: { select: { name: true, email: true } },
+      },
+      orderBy: [{ role: "asc" }, { createdAt: "asc" }],
+    });
+
+    members = memberships.map((m) => ({
+      id: m.userId,
+      name: scheduleMemberNameFromUser(m.user),
+      unavailableDates: [],
+    }));
+  }
+
   return {
     teamId: parsedTeamId,
     members,

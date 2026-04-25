@@ -183,10 +183,23 @@ export default function Home() {
     );
   }, []);
 
-  const handleRosterImported = useCallback((imported: TeamMemberForm[]) => {
-    setMembers(withMinimumMemberRows(imported));
-    setResult(null);
-  }, []);
+  const handleRosterImported = useCallback(
+    (imported: TeamMemberForm[]) => {
+      const padded = withMinimumMemberRows(imported);
+      setMembers(padded);
+      setResult(null);
+      // Persist immediately so focus/pageshow draft sync cannot overwrite with stale localStorage
+      // before the autosave effect runs (avoids blank names right after import).
+      saveScheduleDraft({
+        startDate,
+        endDate,
+        holidayCountry,
+        members: padded,
+        colorblindMode,
+      });
+    },
+    [colorblindMode, endDate, holidayCountry, startDate],
+  );
 
   return (
     <div className="bg-background min-h-full">
