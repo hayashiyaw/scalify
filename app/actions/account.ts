@@ -3,6 +3,7 @@
 import { ZodError } from "zod";
 
 import {
+  AccountStorageUnavailableError,
   AccountEmailConfirmMismatchError,
   AccountEmailTakenError,
   AccountNoPasswordError,
@@ -11,9 +12,12 @@ import {
   UnauthorizedAccountError,
   changePasswordForCurrentUser,
   deleteAccountForCurrentUser,
+  finalizeAvatarUploadForCurrentUser,
+  presignAvatarUploadForCurrentUser,
   updateEmailForCurrentUser,
   updateProfileForCurrentUser,
 } from "@/lib/account/service";
+import { AvatarValidationError } from "@/lib/storage";
 
 type AccountActionError = {
   ok: false;
@@ -61,6 +65,9 @@ function toAccountActionError(error: unknown): AccountActionError {
       fieldErrors: { confirmEmail: [error.message] },
     };
   }
+  if (error instanceof AvatarValidationError || error instanceof AccountStorageUnavailableError) {
+    return { ok: false, error: error.message };
+  }
   console.error(error);
   return { ok: false, error: "Something went wrong. Try again." };
 }
@@ -104,6 +111,33 @@ export async function deleteAccountAction(
   try {
     await deleteAccountForCurrentUser(raw);
     return { ok: true, data: { deleted: true } };
+  } catch (error) {
+    return toAccountActionError(error);
+  }
+}
+
+export async function presignAvatarUploadAction(raw: unknown): Promise<
+  | AccountActionSuccess<{
+      uploadUrl: string;
+      objectKey: string;
+      expiresInSeconds: number;
+    }>
+  | AccountActionError
+> {
+  try {
+    const data = await presignAvatarUploadForCurrentUser(raw);
+    return { ok: true, data };
+  } catch (error) {
+    return toAccountActionError(error);
+  }
+}
+
+export async function finalizeAvatarUploadAction(raw: unknown): Promise<
+  AccountActionSuccess<{ sessionUpdate: AccountSessionPatch }> | AccountActionError
+> {
+  try {
+    const patch = await finalizeAvatarUploadForCurrentUser(raw);
+    return { ok: true, data: { sessionUpdate: patch } };
   } catch (error) {
     return toAccountActionError(error);
   }

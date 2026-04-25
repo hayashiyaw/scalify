@@ -24,6 +24,7 @@ export {
   normalizeAvatarContentType,
 } from "@/lib/storage/avatar-validation";
 export {
+  avatarObjectKeyBelongsToUser,
   isWellFormedAvatarObjectKey,
   makeAvatarObjectKey,
 } from "@/lib/storage/avatar-key";
