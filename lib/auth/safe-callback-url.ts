@@ -1,4 +1,23 @@
 /**
+ * Builds an auth page href, preserving a safe callbackUrl query param when present.
+ */
+export function buildAuthHref(
+  path: string,
+  callbackUrl: string | null | undefined,
+  origin: string,
+): string {
+  if (!callbackUrl?.trim()) {
+    return path;
+  }
+  const safe = safePostLoginPath(callbackUrl, origin);
+  if (safe === "/") {
+    return path;
+  }
+  const params = new URLSearchParams({ callbackUrl: callbackUrl.trim() });
+  return `${path}?${params.toString()}`;
+}
+
+/**
  * Resolves a post-login redirect target from `callbackUrl` query param.
  * Only same-origin paths are allowed; auth pages fall back to `/`.
  */

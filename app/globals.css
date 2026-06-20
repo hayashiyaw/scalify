@@ -7,6 +7,11 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-auth-brand: var(--auth-brand);
+  --color-auth-brand-end: var(--auth-brand-end);
+  --color-auth-form-bg: var(--auth-form-bg);
+  --color-auth-form-fg: var(--auth-form-fg);
+  --color-auth-form-muted: var(--auth-form-muted);
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
     "Liberation Mono", "Courier New", monospace;
@@ -83,6 +88,11 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --auth-brand: oklch(0.35 0.18 255);
+  --auth-brand-end: oklch(0.28 0.15 260);
+  --auth-form-bg: oklch(1 0 0);
+  --auth-form-fg: oklch(0.145 0 0);
+  --auth-form-muted: oklch(0.556 0 0);
 }
 
 .dark {
@@ -125,5 +135,11 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  .auth-brand-gradient {
+    background: linear-gradient(135deg, var(--auth-brand), var(--auth-brand-end));
   }
 }

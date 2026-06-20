@@ -7,11 +7,25 @@ import Credentials from "next-auth/providers/credentials";
 import { z } from "zod";
 
 import { prisma } from "@/lib/db";
+import {
+  checkRateLimit,
+  recordRateLimitAttempt,
+  type RateLimitOptions,
+} from "@/lib/auth/rate-limit";
 
 const authCredentialsSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
 });
+
+const LOGIN_RATE_LIMIT: RateLimitOptions = {
+  maxAttempts: 10,
+  windowMs: 15 * 60 * 1000,
+};
+
+function loginRateLimitKey(email: string): string {
+  return `login:${email.toLowerCase()}`;
+}
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
@@ -27,11 +41,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null;
         }
 
+        const email = parsed.data.email.toLowerCase();
+        const rateLimit = checkRateLimit(loginRateLimitKey(email), LOGIN_RATE_LIMIT);
+        if (!rateLimit.allowed) {
+          return null;
+        }
+
         const user = await prisma.user.findUnique({
-          where: { email: parsed.data.email.toLowerCase() },
+          where: { email },
         });
 
         if (!user?.passwordHash) {
+          recordRateLimitAttempt(loginRateLimitKey(email), LOGIN_RATE_LIMIT);
           return null;
         }
 
@@ -41,6 +62,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         );
 
         if (!validPassword) {
+          recordRateLimitAttempt(loginRateLimitKey(email), LOGIN_RATE_LIMIT);
           return null;
         }
 
@@ -52,7 +74,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     strategy: "jwt",
   },
   callbacks: {
-    jwt: async ({ token, user, trigger, session }) => {
+    jwt: async ({ token, user, trigger }) => {
       if (user) {
         const u = user as NextAuthUser;
         token.id = u.id;
@@ -63,25 +85,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           ? u.emailVerified.toISOString()
           : null;
       }
-      if (trigger === "update" && session) {
-        const s = session as {
-          name?: string | null;
-          email?: string;
-          emailVerified?: Date | string | null;
-          image?: string | null;
-        };
-        if (s.name !== undefined) token.name = s.name;
-        if (s.email !== undefined) token.email = s.email;
-        if (s.image !== undefined) token.picture = s.image;
-        if ("emailVerified" in s) {
-          if (s.emailVerified === null) {
-            token.emailVerified = null;
-          } else if (s.emailVerified instanceof Date) {
-            token.emailVerified = s.emailVerified.toISOString();
-          } else if (typeof s.emailVerified === "string") {
-            token.emailVerified = s.emailVerified;
-          }
+      if (trigger === "update" && token.id) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: String(token.id) },
+        });
+        if (!dbUser) {
+          return token;
         }
+        token.name = dbUser.name;
+        token.email = dbUser.email ?? undefined;
+        token.picture = dbUser.image;
+        token.emailVerified = dbUser.emailVerified
+          ? dbUser.emailVerified.toISOString()
+          : null;
       }
       return token;
     },

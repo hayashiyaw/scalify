@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useEffect } from "react";
+import { Suspense, useActionState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 
 import { type SignupActionState, signupAction } from "@/app/actions/auth";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -11,9 +11,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { buildAuthHref, safePostLoginPath } from "@/lib/auth/safe-callback-url";
 
-export default function RegisterPage() {
-  const router = useRouter();
+function RegisterContent() {
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl");
+  const loginHref = buildAuthHref("/login", callbackUrl, "http://local.invalid");
+
   const initialSignupState: SignupActionState = {
     message: null,
     success: false,
@@ -26,9 +30,9 @@ export default function RegisterPage() {
     if (!safeSignupState.success) {
       return;
     }
-    router.push("/");
-    router.refresh();
-  }, [router, safeSignupState.success]);
+    const next = safePostLoginPath(callbackUrl, window.location.origin);
+    window.location.assign(next);
+  }, [callbackUrl, safeSignupState.success]);
 
   return (
     <main className="bg-background min-h-full px-4 py-10">
@@ -91,7 +95,7 @@ export default function RegisterPage() {
 
         <p className="text-muted-foreground text-sm">
           Already registered?{" "}
-          <Link href="/login" className="text-primary underline-offset-4 hover:underline">
+          <Link href={loginHref} className="text-primary underline-offset-4 hover:underline">
             Log in
           </Link>
           .{" "}
@@ -102,5 +106,25 @@ export default function RegisterPage() {
         </p>
       </div>
     </main>
+  );
+}
+
+function RegisterFallback() {
+  return (
+    <main className="bg-background min-h-full px-4 py-10">
+      <div className="mx-auto flex w-full max-w-md flex-col gap-6">
+        <div role="status" aria-live="polite" className="text-sm text-muted-foreground">
+          Loading…
+        </div>
+      </div>
+    </main>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<RegisterFallback />}>
+      <RegisterContent />
+    </Suspense>
   );
 }

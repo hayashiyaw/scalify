@@ -1,8 +1,30 @@
 import { describe, expect, it } from "vitest";
 
-import { safePostLoginPath } from "@/lib/auth/safe-callback-url";
+import { buildAuthHref, safePostLoginPath } from "@/lib/auth/safe-callback-url";
 
 const origin = "http://localhost:3000";
+
+describe("buildAuthHref", () => {
+  it("returns path unchanged when callback is missing", () => {
+    expect(buildAuthHref("/register", null, origin)).toBe("/register");
+    expect(buildAuthHref("/login", undefined, origin)).toBe("/login");
+    expect(buildAuthHref("/login", "  ", origin)).toBe("/login");
+  });
+
+  it("appends safe callbackUrl query param", () => {
+    expect(buildAuthHref("/register", "/account", origin)).toBe(
+      "/register?callbackUrl=%2Faccount",
+    );
+    expect(buildAuthHref("/login", "/teams?tab=1", origin)).toBe(
+      "/login?callbackUrl=%2Fteams%3Ftab%3D1",
+    );
+  });
+
+  it("omits unsafe callbackUrl values", () => {
+    expect(buildAuthHref("/register", "https://evil.example", origin)).toBe("/register");
+    expect(buildAuthHref("/login", "/login", origin)).toBe("/login");
+  });
+});
 
 describe("safePostLoginPath", () => {
   it("defaults to home when callback is missing", () => {
