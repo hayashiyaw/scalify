@@ -5,18 +5,8 @@ export type MemberColors = {
 
 export type MemberColorMode = "normal" | "colorblind";
 
-function hashString(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) {
-    h = (h << 5) - h + s.charCodeAt(i);
-    h |= 0;
-  }
-  return Math.abs(h);
-}
-
-// Fixed palettes of strongly separated colors. These are intentionally
-// discrete (no continuous hue wheel) so even when ids hash close together,
-// the assigned colors remain clearly distinct.
+// Fixed palettes of strongly separated colors so adjacent positions remain
+// visually distinct.
 const NORMAL_PALETTE: MemberColors[] = [
   { background: "oklch(0.93 0.14 25)", foreground: "oklch(0.3 0.12 25)" }, // orange
   { background: "oklch(0.93 0.14 60)", foreground: "oklch(0.3 0.11 60)" }, // yellow
@@ -52,23 +42,17 @@ const COLORBLIND_PALETTE: MemberColors[] = [
   { background: "oklch(0.9 0.16 10)", foreground: "oklch(0.3 0.13 10)" }, // red
 ];
 
-/**
- * Distinct, readable HSL backgrounds per member; foreground is dark or light text.
- */
-export function getMemberColors(
-  memberId: string,
+export function buildMemberColorMap(
+  memberIds: string[],
   mode: MemberColorMode = "normal",
-): MemberColors {
-  const h = hashString(memberId);
+): Map<string, MemberColors> {
+  const palette = mode === "colorblind" ? COLORBLIND_PALETTE : NORMAL_PALETTE;
+  const memberColorMap = new Map<string, MemberColors>();
 
-  if (mode === "colorblind") {
-    const idx = h % COLORBLIND_PALETTE.length;
-    return COLORBLIND_PALETTE[idx]!;
-  }
+  memberIds.forEach((memberId, index) => {
+    // Wrap around to the start when team size exceeds the palette length.
+    memberColorMap.set(memberId, palette[index % palette.length]!);
+  });
 
-  // Normal mode: choose from a fixed palette of high-contrast colors. This
-  // guarantees discrete, visually separated colors instead of relying on
-  // small hue differences.
-  const idx = h % NORMAL_PALETTE.length;
-  return NORMAL_PALETTE[idx]!;
+  return memberColorMap;
 }

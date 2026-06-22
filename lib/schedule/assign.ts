@@ -23,10 +23,13 @@ function enumerateDaysInclusive(start: Date, end: Date): Date[] {
 function poolForDay(
   date: Date,
   isPublicHoliday: HolidayChecker,
-): { pool: ShiftPool; hours: number } {
-  const weekendOrHoliday = isWeekend(date) || isPublicHoliday(date);
-  if (weekendOrHoliday) return { pool: "B", hours: 24 };
-  return { pool: "A", hours: 12 };
+): { pool: ShiftPool; hours: number; isPublicHoliday: boolean } {
+  const isHoliday = isPublicHoliday(date);
+  const weekendOrHoliday = isWeekend(date) || isHoliday;
+  if (weekendOrHoliday) {
+    return { pool: "B", hours: 24, isPublicHoliday: isHoliday };
+  }
+  return { pool: "A", hours: 12, isPublicHoliday: isHoliday };
 }
 
 /** `YYYY-MM` from ISO date string */
@@ -141,7 +144,10 @@ export function assignShifts(
   for (const day of days) {
     const dateStr = formatISODateOnly(day);
     const mk = monthKey(dateStr);
-    const { pool, hours } = poolForDay(day, isPublicHoliday);
+    const { pool, hours, isPublicHoliday: isDayPublicHoliday } = poolForDay(
+      day,
+      isPublicHoliday,
+    );
 
     const available = input.members.filter(
       (m) => !m.unavailableDates.includes(dateStr),
@@ -169,6 +175,7 @@ export function assignShifts(
         pool,
         assigneeId: null,
         hours,
+        isPublicHoliday: isDayPublicHoliday,
       });
       warnings.push({ date: dateStr, code: "no_available_member" });
       continue;
@@ -209,12 +216,14 @@ export function assignShifts(
       pool,
       assigneeId: chosenId,
       hours,
+      isPublicHoliday: isDayPublicHoliday,
     });
     assignmentsByDate.set(dateStr, {
       date: dateStr,
       pool,
       assigneeId: chosenId,
       hours,
+      isPublicHoliday: isDayPublicHoliday,
     });
   }
 
