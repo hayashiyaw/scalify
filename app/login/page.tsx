@@ -1,17 +1,38 @@
 "use client";
 
-import Link from "next/link";
-import { Suspense, useState, useTransition } from "react";
+import { Suspense, useSyncExternalStore, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 
+import { AuthBrandPanel } from "@/components/auth/auth-brand-panel";
+import { AuthField } from "@/components/auth/auth-field";
+import { AuthFormPanel } from "@/components/auth/auth-form-panel";
+import { AuthInput } from "@/components/auth/auth-input";
+import { AuthSplitLayout } from "@/components/auth/auth-split-layout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { safePostLoginPath } from "@/lib/auth/safe-callback-url";
+import { safePostLoginPath, buildAuthHref } from "@/lib/auth/safe-callback-url";
+
+const BRAND_HEADLINE = "Fair shifts for every squad 📅";
+const BRAND_TAGLINE =
+  "Plan rotations, respect time off, and export your calendar—without the spreadsheet.";
+
+function useAuthHrefFromLocation(path: string): string {
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      window.addEventListener("popstate", onStoreChange);
+      return () => window.removeEventListener("popstate", onStoreChange);
+    },
+    () =>
+      buildAuthHref(
+        path,
+        new URLSearchParams(window.location.search).get("callbackUrl"),
+        window.location.origin,
+      ),
+    () => path,
+  );
+}
 
 function LoginForm() {
   const searchParams = useSearchParams();
@@ -19,53 +40,38 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <>
-      <Card>
-        <CardHeader>
-          <CardTitle>Welcome back</CardTitle>
-          <CardDescription>Use your email and password.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            className="space-y-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setError(null);
-              const form = event.currentTarget;
-              const formData = new FormData(form);
-              startTransition(async () => {
-                const result = await signIn("credentials", {
-                  email: String(formData.get("email") ?? ""),
-                  password: String(formData.get("password") ?? ""),
-                  redirect: false,
-                });
-                if (result?.error) {
-                  setError("Invalid email or password.");
-                  return;
-                }
-                const next = safePostLoginPath(
-                  searchParams.get("callbackUrl"),
-                  window.location.origin,
-                );
-                window.location.assign(next);
-              });
-            }}
-          >
-            <div className="space-y-1">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" type="email" required />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" name="password" type="password" required />
-            </div>
-            <Button type="submit" className="w-full" disabled={isPending}>
-              {isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-              Log in
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+    <form
+      className="space-y-6"
+      onSubmit={(event) => {
+        event.preventDefault();
+        setError(null);
+        const form = event.currentTarget;
+        const formData = new FormData(form);
+        startTransition(async () => {
+          const result = await signIn("credentials", {
+            email: String(formData.get("email") ?? ""),
+            password: String(formData.get("password") ?? ""),
+            redirect: false,
+          });
+          if (result?.error) {
+            setError("Invalid email or password.");
+            return;
+          }
+          const next = safePostLoginPath(
+            searchParams.get("callbackUrl"),
+            window.location.origin,
+          );
+          window.location.assign(next);
+        });
+      }}
+    >
+      <AuthField id="email" label="Email">
+        <AuthInput id="email" name="email" type="email" required />
+      </AuthField>
+
+      <AuthField id="password" label="Password">
+        <AuthInput id="password" name="password" type="password" required />
+      </AuthField>
 
       {error ? (
         <Alert variant="destructive">
@@ -73,46 +79,76 @@ function LoginForm() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
-    </>
+
+      <Button
+        type="submit"
+        className="h-11 w-full rounded-full bg-black text-white hover:bg-neutral-800"
+        disabled={isPending}
+      >
+        {isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+        Login Now
+      </Button>
+    </form>
+  );
+}
+
+function LoginContent() {
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl");
+  const registerHref = buildAuthHref("/register", callbackUrl, "http://local.invalid");
+
+  return (
+    <AuthSplitLayout
+      brand={<AuthBrandPanel headline={BRAND_HEADLINE} tagline={BRAND_TAGLINE} />}
+    >
+      <AuthFormPanel
+        brandName="Scalify"
+        brandHref="/"
+        title="Welcome Back!"
+        alternatePrompt="Don't have an account?"
+        alternateLinkLabel="Sign up"
+        alternateLinkHref={registerHref}
+        footerLinkLabel="Back to scheduler"
+        footerLinkHref="/"
+      >
+        <LoginForm />
+      </AuthFormPanel>
+    </AuthSplitLayout>
+  );
+}
+
+function LoginFallback() {
+  const registerHref = useAuthHrefFromLocation("/register");
+
+  return (
+    <AuthSplitLayout
+      brand={<AuthBrandPanel headline={BRAND_HEADLINE} tagline={BRAND_TAGLINE} />}
+    >
+      <AuthFormPanel
+        brandName="Scalify"
+        brandHref="/"
+        title="Welcome Back!"
+        alternatePrompt="Don't have an account?"
+        alternateLinkLabel="Sign up"
+        alternateLinkHref={registerHref}
+        footerLinkLabel="Back to scheduler"
+        footerLinkHref="/"
+      >
+        <div className="space-y-4" role="status" aria-live="polite">
+          <p className="text-sm text-auth-form-muted">Loading…</p>
+          <div className="h-10 animate-pulse rounded-sm bg-auth-form-muted/20" />
+          <div className="h-10 animate-pulse rounded-sm bg-auth-form-muted/20" />
+          <div className="h-11 animate-pulse rounded-full bg-auth-form-muted/30" />
+        </div>
+      </AuthFormPanel>
+    </AuthSplitLayout>
   );
 }
 
 export default function LoginPage() {
   return (
-    <main className="bg-background min-h-full px-4 py-10">
-      <div className="mx-auto flex w-full max-w-md flex-col gap-6">
-        <div>
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">Log in</h1>
-          <p className="text-muted-foreground text-sm">
-            Access your account. Scheduling remains available on the home page.
-          </p>
-        </div>
-
-        <Suspense
-          fallback={
-            <Card>
-              <CardHeader>
-                <CardTitle>Welcome back</CardTitle>
-                <CardDescription>Loading…</CardDescription>
-              </CardHeader>
-            </Card>
-          }
-        >
-          <LoginForm />
-        </Suspense>
-
-        <p className="text-muted-foreground text-sm">
-          Need an account?{" "}
-          <Link href="/register" className="text-primary underline-offset-4 hover:underline">
-            Create one
-          </Link>
-          .{" "}
-          <Link href="/" className="text-primary underline-offset-4 hover:underline">
-            Back to scheduler
-          </Link>
-          .
-        </p>
-      </div>
-    </main>
+    <Suspense fallback={<LoginFallback />}>
+      <LoginContent />
+    </Suspense>
   );
 }

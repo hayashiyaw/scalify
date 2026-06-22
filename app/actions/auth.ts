@@ -5,6 +5,12 @@ import { AuthError } from "next-auth";
 import { z } from "zod";
 
 import { signIn, signOut } from "@/auth";
+import { getTrustedClientIp } from "@/lib/auth/client-ip";
+import {
+  checkRateLimit,
+  recordRateLimitAttempt,
+  type RateLimitOptions,
+} from "@/lib/auth/rate-limit";
 import { prisma } from "@/lib/db";
 
 const signupSchema = z.object({
@@ -18,6 +24,30 @@ const signupSchema = z.object({
     .regex(/[0-9]/, "Password must include a number.")
     .regex(/[^a-zA-Z0-9]/, "Password must include a symbol."),
 });
+
+const SIGNUP_RATE_LIMIT: RateLimitOptions = {
+  maxAttempts: 5,
+  windowMs: 60 * 60 * 1000,
+};
+
+const SIGNUP_IP_RATE_LIMIT: RateLimitOptions = {
+  maxAttempts: 20,
+  windowMs: 60 * 60 * 1000,
+};
+
+const SIGNUP_GENERIC_ERROR =
+  "Unable to create an account with these details. Try logging in or use a different email.";
+
+const SIGNUP_RATE_LIMIT_MESSAGE =
+  "Too many signup attempts. Please wait and try again later.";
+
+function signupEmailRateLimitKey(email: string): string {
+  return `signup:${email.toLowerCase()}`;
+}
+
+function signupIpRateLimitKey(ip: string): string {
+  return `signup-ip:${ip}`;
+}
 
 export type SignupActionState = {
   message: string | null;
@@ -48,13 +78,42 @@ export async function signupAction(
   }
 
   const email = parsed.data.email.toLowerCase();
+  const clientIp = await getTrustedClientIp();
+
+  const emailRateLimit = checkRateLimit(
+    signupEmailRateLimitKey(email),
+    SIGNUP_RATE_LIMIT,
+  );
+  if (!emailRateLimit.allowed) {
+    return {
+      message: SIGNUP_RATE_LIMIT_MESSAGE,
+      success: false,
+      fieldErrors: {},
+    };
+  }
+
+  if (clientIp) {
+    const ipRateLimit = checkRateLimit(signupIpRateLimitKey(clientIp), SIGNUP_IP_RATE_LIMIT);
+    if (!ipRateLimit.allowed) {
+      return {
+        message: SIGNUP_RATE_LIMIT_MESSAGE,
+        success: false,
+        fieldErrors: {},
+      };
+    }
+  }
+
+  recordRateLimitAttempt(signupEmailRateLimitKey(email), SIGNUP_RATE_LIMIT);
+  if (clientIp) {
+    recordRateLimitAttempt(signupIpRateLimitKey(clientIp), SIGNUP_IP_RATE_LIMIT);
+  }
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
     return {
-      message: "This email is already in use.",
+      message: SIGNUP_GENERIC_ERROR,
       success: false,
-      fieldErrors: { email: ["This email is already in use."] },
+      fieldErrors: {},
     };
   }
 

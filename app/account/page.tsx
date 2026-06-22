@@ -1,13 +1,16 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
+import Image from "next/image";
 import type { Session } from "next-auth";
 import { signOut, useSession } from "next-auth/react";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 
 import {
   changePasswordAction,
   deleteAccountAction,
+  finalizeAvatarUploadAction,
+  presignAvatarUploadAction,
   updateEmailAction,
   updateProfileAction,
 } from "@/app/actions/account";
@@ -16,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ALLOWED_AVATAR_CONTENT_TYPES, MAX_AVATAR_BYTES } from "@/lib/storage";
 
 function FieldError({ messages }: { messages?: string[] }) {
   if (!messages?.length) return null;
@@ -33,6 +37,7 @@ function AccountSettingsForms({
   user: NonNullable<Session["user"]>;
   updateSession: NonNullable<ReturnType<typeof useSession>["update"]>;
 }) {
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(user.name ?? "");
   const [newEmail, setNewEmail] = useState(user.email);
   const [emailCurrentPassword, setEmailCurrentPassword] = useState("");
@@ -58,6 +63,9 @@ function AccountSettingsForms({
 
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteFieldErrors, setDeleteFieldErrors] = useState<Record<string, string[]>>({});
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [avatarMessage, setAvatarMessage] = useState<string | null>(null);
+  const [pendingAvatar, startAvatar] = useTransition();
 
   const [pendingProfile, startProfile] = useTransition();
   const [pendingEmail, startEmail] = useTransition();
@@ -66,8 +74,117 @@ function AccountSettingsForms({
 
   const emailVerified = user.emailVerified;
 
+  const avatarMaxMb = (MAX_AVATAR_BYTES / (1024 * 1024)).toFixed(0);
+  const allowedAvatarAccept = ALLOWED_AVATAR_CONTENT_TYPES.join(",");
+
   return (
     <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Avatar</CardTitle>
+          <CardDescription>
+            Upload a JPG, PNG, WEBP, or GIF up to {avatarMaxMb} MB. The file uploads directly to
+            storage using a short-lived signed URL.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="bg-muted text-muted-foreground flex size-12 items-center justify-center overflow-hidden rounded-full text-xs">
+                {user.image ? (
+                  <Image
+                    src={user.image}
+                    alt="Current avatar"
+                    className="size-full object-cover"
+                    width={48}
+                    height={48}
+                    unoptimized
+                  />
+                ) : (
+                  "None"
+                )}
+              </div>
+              <p className="text-muted-foreground text-sm">
+                {user.image ? "Current avatar image." : "No avatar uploaded yet."}
+              </p>
+            </div>
+            <Input
+              ref={avatarInputRef}
+              id="account-avatar-file"
+              type="file"
+              accept={allowedAvatarAccept}
+              disabled={pendingAvatar}
+            />
+          </div>
+          {avatarError ? (
+            <Alert variant="destructive">
+              <AlertTitle>Could not upload avatar</AlertTitle>
+              <AlertDescription>{avatarError}</AlertDescription>
+            </Alert>
+          ) : null}
+          {avatarMessage ? (
+            <Alert>
+              <AlertTitle>Avatar updated</AlertTitle>
+              <AlertDescription>{avatarMessage}</AlertDescription>
+            </Alert>
+          ) : null}
+          <Button
+            type="button"
+            disabled={pendingAvatar}
+            onClick={() => {
+              setAvatarError(null);
+              setAvatarMessage(null);
+              const file = avatarInputRef.current?.files?.[0];
+              if (!file) {
+                setAvatarError("Choose an image file first.");
+                return;
+              }
+              startAvatar(async () => {
+                const presign = await presignAvatarUploadAction({
+                  contentType: file.type,
+                  contentLength: file.size,
+                });
+                if (!presign.ok) {
+                  setAvatarError(presign.error);
+                  return;
+                }
+
+                const putRes = await fetch(presign.data.uploadUrl, {
+                  method: "PUT",
+                  headers: { "Content-Type": file.type },
+                  body: file,
+                });
+                if (!putRes.ok) {
+                  setAvatarError("Upload failed. Try again with a different image.");
+                  return;
+                }
+
+                const finalize = await finalizeAvatarUploadAction({
+                  objectKey: presign.data.objectKey,
+                });
+                if (!finalize.ok) {
+                  setAvatarError(finalize.error);
+                  return;
+                }
+                await updateSession({
+                  name: finalize.data.sessionUpdate.name,
+                  email: finalize.data.sessionUpdate.email,
+                  emailVerified: finalize.data.sessionUpdate.emailVerified,
+                  image: finalize.data.sessionUpdate.image,
+                });
+                if (avatarInputRef.current) {
+                  avatarInputRef.current.value = "";
+                }
+                setAvatarMessage("Your avatar was uploaded.");
+              });
+            }}
+          >
+            {pendingAvatar ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+            Upload avatar
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Profile</CardTitle>

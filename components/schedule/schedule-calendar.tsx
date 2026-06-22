@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { addDays, formatISODateOnly, parseISODateOnly } from "@/lib/schedule/dates";
-import { getMemberColors, type MemberColorMode } from "@/lib/schedule/colors";
+import { buildMemberColorMap, type MemberColorMode } from "@/lib/schedule/colors";
 import type { DayAssignment } from "@/lib/schedule/types";
 import { cn } from "@/lib/utils";
 
@@ -58,6 +58,10 @@ export function ScheduleCalendar({
     for (const a of assignments) m.set(a.date, a);
     return m;
   }, [assignments]);
+  const colorMap = useMemo(
+    () => buildMemberColorMap(memberDisplayOrder, colorMode),
+    [memberDisplayOrder, colorMode],
+  );
 
   const weeks = useMemo(() => monthMatrix(cursor), [cursor]);
 
@@ -128,9 +132,7 @@ export function ScheduleCalendar({
               const sameMonth = day.getMonth() === cursor.getMonth();
               const assignment = byDate.get(iso);
               const assigneeId = assignment?.assigneeId ?? null;
-              const colors = assigneeId
-                ? getMemberColors(assigneeId, colorMode)
-                : null;
+              const colors = assigneeId ? colorMap.get(assigneeId) : null;
               const label = assigneeId
                 ? memberNames.get(assigneeId) ?? assigneeId
                 : inRange
@@ -162,9 +164,16 @@ export function ScheduleCalendar({
                     {day.getDate()}
                   </span>
                   {inRange ? (
-                    <span className="line-clamp-2 break-words text-[0.7rem] leading-tight">
-                      {assigneeId ? label : "Unassigned"}
-                    </span>
+                    <>
+                      <span className="line-clamp-2 break-words text-[0.7rem] leading-tight">
+                        {assigneeId ? label : "Unassigned"}
+                      </span>
+                      {assignment?.isPublicHoliday ? (
+                        <span className="mt-1 inline-flex w-fit rounded-full border border-black/70 bg-black px-1.5 py-0.5 text-[0.65rem] font-medium text-white">
+                          Holiday
+                        </span>
+                      ) : null}
+                    </>
                   ) : null}
                 </div>
               );
@@ -174,15 +183,19 @@ export function ScheduleCalendar({
             <span className="font-medium">People</span>
             {memberDisplayOrder.map((id) => {
               const name = memberNames.get(id)?.trim() || id;
-              const colors = getMemberColors(id, colorMode);
+              const colors = colorMap.get(id);
               return (
                 <span
                   key={id}
                   className="rounded-md border px-2 py-0.5 font-medium shadow-sm"
-                  style={{
-                    backgroundColor: colors.background,
-                    color: colors.foreground,
-                  }}
+                  style={
+                    colors
+                      ? {
+                          backgroundColor: colors.background,
+                          color: colors.foreground,
+                        }
+                      : undefined
+                  }
                 >
                   {name}
                 </span>

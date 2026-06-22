@@ -97,12 +97,13 @@ function buildCalendarSections(
 
         const a = assignmentByDate.get(iso);
         const dayNum = String(day.getDate());
+        const suffix = a?.isPublicHoliday ? " (Holiday)" : "";
         if (!a?.assigneeId) {
-          cells.push(`${dayNum} - Unassigned`);
+          cells.push(`${dayNum} - Unassigned${suffix}`);
         } else {
           const name =
             memberNames.get(a.assigneeId)?.trim() || a.assigneeId;
-          cells.push(`${dayNum} - ${name}`);
+          cells.push(`${dayNum} - ${name}${suffix}`);
         }
       }
       if (anyInMonth) {

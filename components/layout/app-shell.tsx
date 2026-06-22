@@ -89,6 +89,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [mobileNavOpen]);
 
+  const pathname = usePathname();
+
+  if (pathname === "/login" || pathname === "/register") {
+    return <div className="light min-h-screen">{children}</div>;
+  }
+
   const authed = status === "authenticated" && Boolean(session?.user);
 
   return (

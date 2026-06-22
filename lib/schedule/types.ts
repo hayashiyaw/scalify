@@ -25,6 +25,7 @@ export type DayAssignment = {
   pool: ShiftPool;
   assigneeId: string | null;
   hours: number;
+  isPublicHoliday: boolean;
 };
 
 export type PersonReport = {
