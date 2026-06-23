@@ -30,3 +30,15 @@ export function isWellFormedAvatarObjectKey(key: string): boolean {
   if (segments.length < 2) return false;
   return segments.every((s) => s.length > 0 && !s.includes(".."));
 }
+
+/**
+ * Validates ownership for keys generated as `avatars/{userId}/{objectId}`.
+ * This is enforced during finalize/delete flows to prevent cross-user writes.
+ */
+export function avatarObjectKeyBelongsToUser(
+  key: string,
+  userId: string,
+): boolean {
+  assertSafeUserId(userId);
+  return isWellFormedAvatarObjectKey(key) && key.startsWith(`${AVATAR_OBJECT_PREFIX}${userId}/`);
+}
